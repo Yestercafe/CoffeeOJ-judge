@@ -1,8 +1,16 @@
 [package]
-name = "CoffeeOJ-judger"
+name = "coffee_oj_judger"
 version = "0.1.0"
 edition = "2021"
 
-# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+path = "src/main.rs"
+name = "coffee_oj_judger"
 
 [dependencies]
+nix = "0.26.2"
+serde = { version = "1.0.164", features = ["derive"] }
+toml = "0.7.4"
