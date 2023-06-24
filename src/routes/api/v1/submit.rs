@@ -44,5 +44,7 @@ pub async fn submit(form: web::Json<models::Submission>) -> HttpResponse {
     let pairwise_testcase_files = get_pairwise_testcase_files(testcase_files);
     let ret = format!("{:?}", RUNNER.execute(&source_path, lang, &pairwise_testcase_files));
 
+    fs::remove_file(source_path).unwrap();
+
     HttpResponse::Ok().body(ret)
 }

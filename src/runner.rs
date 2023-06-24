@@ -166,6 +166,9 @@ impl Runner {
             println!("===== Testcase {} was done", i);
         }
 
+        let target_path = format!("./{}{}", src_path, crate::runner::EXECUABLE_SUFFIX);
+        fs::remove_file(target_path).unwrap();
+
         if wrong_cnt == 0 {
             Ok(())
         } else {
