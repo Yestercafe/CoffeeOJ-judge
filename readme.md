@@ -1,5 +1,25 @@
 # CoffeeOJ-judger
 
+## Build & Run
+
+Need cargo and node.js.
+
+Rust dev env and cargo:
+
+```bash
+curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh
+```
+
+Node.js and npm: <https://nodejs.org/>
+
+Need tmux, please install by using instructions like `sudo apt install tmux` or `brew install tmux`.
+
+```bash
+./startup.sh
+```
+
+## API
+
 POST 127.0.0.1:4514/api/v1/submit:
 
 ```
