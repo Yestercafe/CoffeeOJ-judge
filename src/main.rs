@@ -35,11 +35,9 @@ fn main() {
     for (src_file, lang) in src_files.iter() {
         println!();
         let src_path = format!("assets/src/{}", src_file);
-        if new_runner
-            .execute(&src_path, lang, &pairwise_testcase_files)
-            .is_ok()
-        {
-            println!("{} exec succeed!!", src_file);
-        }
+        println!(
+            "{:?}",
+            new_runner.execute(&src_path, lang, &pairwise_testcase_files)
+        );
     }
 }

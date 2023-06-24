@@ -10,7 +10,7 @@ use toml::{Table, Value};
 use crate::{
     compiler::Compiler,
     file::{Testcase, TestcaseFile},
-    judger::Judger,
+    judger::{Judger, JudgerErr},
 };
 
 pub static CONFIG_PATH: &str = "config.toml";
@@ -81,34 +81,36 @@ impl Runner {
         src_path: &str,
         lang: &str,
         testcases: &Vec<Testcase>,
-    ) -> Result<(), RunnerErr> {
+    ) -> Result<(), JudgerErr> {
         let compiler_ret = self.compiler.compile(src_path, lang);
         if let Err(RunnerErr::MissingConfig) = compiler_ret {
-            return compiler_ret;
+            return Err(JudgerErr::InternalError(RunnerErr::MissingConfig));
         } else if let Err(RunnerErr::MissingCompConfig(_)) = compiler_ret {
             println!("Lang `{}` doesn't need to compile, run directly.", lang);
         } else if let Err(RunnerErr::CompErr(info)) = compiler_ret {
-            return Err(RunnerErr::CompErr(info));
+            return Err(JudgerErr::CompilationError(info));
         }
 
         let gen_exec_ret = self.generate_execution_instruction(src_path, lang);
         let exec_instrs = match gen_exec_ret {
             Ok(instrs) => instrs,
-            Err(e) => return Err(e),
+            Err(e) => return Err(JudgerErr::InternalError(e)),
         }
         .iter()
         .map(|rstr| CString::new(rstr.as_str()).unwrap())
         .collect::<Vec<_>>();
 
         println!("{:?}", exec_instrs);
-        for testcase in testcases {
+
+        let mut wrong_cnt = 0usize;
+        for (i, testcase) in testcases.iter().enumerate() {
             let input_testcase = &testcase.input_file;
             let stdout_testcase_file = TestcaseFile::new(
                 format!("{}.stdout", input_testcase.get_name()).as_str(),
                 format!("{}.stdout", input_testcase.get_path()).as_str(),
             );
 
-            println!("===== Testing `{:?}`", input_testcase);
+            println!("===== Testing `{:?}`, id: {}", input_testcase, i);
             match unsafe { unistd::fork() } {
                 Ok(ForkResult::Parent { child }) => {
                     waitpid(child, None).unwrap();
@@ -149,22 +151,26 @@ impl Runner {
             // stdout => xxx.in.stdout
             // judge:
             match Judger::judge(&stdout_testcase_file, &testcase.output_file) {
-                Ok(true) => println!("====o Test passed"),
-                Ok(false) => println!("====! Test failed!"),
+                Ok(true) => {}
+                Ok(false) => wrong_cnt += 1,
                 Err(err) => println!("====? Errno: {}", err),
             };
 
             fs::remove_file(stdout_testcase_file.get_path()).map_err(|_| {
-                RunnerErr::UnknownErr(format!(
+                JudgerErr::InternalError(RunnerErr::UnknownErr(format!(
                     "can't delete file `{}`",
                     stdout_testcase_file.get_path()
-                ))
+                )))
             })?;
 
-            println!("===== Test was done");
+            println!("===== Testcase {} was done", i);
         }
 
-        Ok(())
+        if wrong_cnt == 0 {
+            Ok(())
+        } else {
+            Err(JudgerErr::WrongAnswer(testcases.len() - wrong_cnt, testcases.len()))
+        }
     }
 }
 

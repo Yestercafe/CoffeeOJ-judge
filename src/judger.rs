@@ -1,6 +1,15 @@
 use std::{fmt::Debug, fs};
 
-use crate::file::TestcaseFile;
+use crate::{file::TestcaseFile, runner::RunnerErr};
+
+#[derive(Debug, PartialEq, PartialOrd, Eq, Ord, Clone)]
+pub enum JudgerErr {
+    // WrongAnswer(#passed testcases, #testcases)
+    WrongAnswer(usize, usize),
+    RuntimeError(String),
+    CompilationError(String),
+    InternalError(RunnerErr),
+}
 
 pub struct Differ {
     lhs_path: String,
