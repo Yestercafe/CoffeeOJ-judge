@@ -169,7 +169,10 @@ impl Runner {
         if wrong_cnt == 0 {
             Ok(())
         } else {
-            Err(JudgerErr::WrongAnswer(testcases.len() - wrong_cnt, testcases.len()))
+            Err(JudgerErr::WrongAnswer(
+                testcases.len() - wrong_cnt,
+                testcases.len(),
+            ))
         }
     }
 }

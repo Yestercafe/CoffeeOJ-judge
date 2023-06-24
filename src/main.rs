@@ -3,9 +3,18 @@ use std::{collections::BTreeMap, fs};
 use coffee_oj_judger::{
     file::{get_pairwise_testcase_files, TestcaseFile},
     runner::Runner,
+    startup::WebApp, utils,
 };
 
-fn main() {
+#[tokio::main]
+async fn main() -> Result<(), std::io::Error> {
+    utils::telemetry::setup_log("coj_judger", "info", std::io::stdout);
+    let web_app = WebApp::new().await?;
+    web_app.run().await?;
+    Ok(())
+}
+
+fn _main() {
     println!("Hello, CoffeeOJ!");
 
     let read_path = "assets/p1001";
