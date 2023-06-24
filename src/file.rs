@@ -33,8 +33,8 @@ impl Debug for TestcaseFile {
 }
 
 pub struct Testcase {
-    input_file: TestcaseFile,
-    output_file: TestcaseFile,
+    pub input_file: TestcaseFile,
+    pub output_file: TestcaseFile,
 }
 
 impl Testcase {

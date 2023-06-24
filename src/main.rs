@@ -1,8 +1,8 @@
-use std::{fs, collections::BTreeMap};
+use std::{collections::BTreeMap, fs};
 
 use coffee_oj_judger::{
-    compiler::Compiler,
-    file::{get_pairwise_testcase_files, TestcaseFile}, runner::Runner,
+    file::{get_pairwise_testcase_files, TestcaseFile},
+    runner::Runner,
 };
 
 fn main() {
@@ -21,7 +21,7 @@ fn main() {
     }
 
     let pairwise_testcase_files = get_pairwise_testcase_files(testcase_files);
-    for pair in pairwise_testcase_files {
+    for pair in &pairwise_testcase_files {
         println!("{:?}", pair);
     }
 
@@ -35,7 +35,10 @@ fn main() {
     for (src_file, lang) in src_files.iter() {
         println!();
         let src_path = format!("assets/src/{}", src_file);
-        if new_runner.execute(&src_path, lang).is_ok() {
+        if new_runner
+            .execute(&src_path, lang, &pairwise_testcase_files)
+            .is_ok()
+        {
             println!("{} exec succeed!!", src_file);
         }
     }

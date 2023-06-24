@@ -9,7 +9,7 @@ use nix::{
 };
 use toml::{Table, Value};
 
-use crate::runner::{Runner, RunnerErr};
+use crate::runner::RunnerErr;
 
 pub struct Compiler {
     pub compilers: BTreeMap<String, Vec<String>>,

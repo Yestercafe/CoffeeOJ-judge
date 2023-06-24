@@ -7,7 +7,11 @@ use nix::{
 };
 use toml::{Table, Value};
 
-use crate::compiler::Compiler;
+use crate::{
+    compiler::Compiler,
+    file::{Testcase, TestcaseFile},
+    judger::Judger,
+};
 
 pub static CONFIG_PATH: &str = "config.toml";
 pub static EXECUABLE_SUFFIX: &str = ".exe";
@@ -72,7 +76,12 @@ impl Runner {
             .collect::<Vec<_>>())
     }
 
-    pub fn execute(&self, src_path: &str, lang: &str) -> Result<(), RunnerErr> {
+    pub fn execute(
+        &self,
+        src_path: &str,
+        lang: &str,
+        testcases: &Vec<Testcase>,
+    ) -> Result<(), RunnerErr> {
         let compiler_ret = self.compiler.compile(src_path, lang);
         if let Err(RunnerErr::MissingConfig) = compiler_ret {
             return compiler_ret;
@@ -92,24 +101,67 @@ impl Runner {
         .collect::<Vec<_>>();
 
         println!("{:?}", exec_instrs);
-        match unsafe { unistd::fork() } {
-            Ok(ForkResult::Parent { child }) => {
-                waitpid(child, None).unwrap();
-            }
-            Ok(ForkResult::Child) => {
-                match unistd::execvp(&exec_instrs[0], &exec_instrs) {
-                    Ok(_) => unreachable!(),
-                    Err(errno) => unistd::write(
-                        libc::STDERR_FILENO,
-                        format!("Execvp error, errno = {:?}\n", errno).as_bytes(),
-                    )
-                    .ok(),
-                };
-                unsafe {
-                    libc::exit(0);
+        for testcase in testcases {
+            let input_testcase = &testcase.input_file;
+            let stdout_testcase_file = TestcaseFile::new(
+                format!("{}.stdout", input_testcase.get_name()).as_str(),
+                format!("{}.stdout", input_testcase.get_path()).as_str(),
+            );
+
+            println!("===== Testing `{:?}`", input_testcase);
+            match unsafe { unistd::fork() } {
+                Ok(ForkResult::Parent { child }) => {
+                    waitpid(child, None).unwrap();
                 }
+                Ok(ForkResult::Child) => {
+                    let input_path = CString::new(input_testcase.get_path()).unwrap();
+                    let output_path =
+                        CString::new(format!("{}.stdout", input_testcase.get_path())).unwrap();
+                    let r_mode = CString::new("r").unwrap();
+                    let w_mode = CString::new("w").unwrap();
+
+                    unsafe {
+                        let stdin = libc::fdopen(libc::STDIN_FILENO, r_mode.as_ptr());
+                        libc::freopen(input_path.as_ptr(), r_mode.as_ptr(), stdin);
+                        let stdout = libc::fdopen(libc::STDOUT_FILENO, w_mode.as_ptr());
+                        libc::freopen(output_path.as_ptr(), w_mode.as_ptr(), stdout);
+                    }
+
+                    match unistd::execvp(&exec_instrs[0], &exec_instrs) {
+                        Ok(_) => unreachable!(),
+                        Err(errno) => unistd::write(
+                            libc::STDERR_FILENO,
+                            format!(
+                                "Execvp error, errno = {:?}, input testcase file: {:?}\n",
+                                errno, input_testcase
+                            )
+                            .as_bytes(),
+                        )
+                        .ok(),
+                    };
+                    unsafe {
+                        libc::exit(0);
+                    }
+                }
+                _ => panic!("Fork failed"),
             }
-            _ => panic!("Fork failed"),
+
+            // stdout => xxx.in.stdout
+            // judge:
+            match Judger::judge(&stdout_testcase_file, &testcase.output_file) {
+                Ok(true) => println!("====o Test passed"),
+                Ok(false) => println!("====! Test failed!"),
+                Err(err) => println!("====? Errno: {}", err),
+            };
+
+            fs::remove_file(stdout_testcase_file.get_path()).map_err(|_| {
+                RunnerErr::UnknownErr(format!(
+                    "can't delete file `{}`",
+                    stdout_testcase_file.get_path()
+                ))
+            })?;
+
+            println!("===== Test was done");
         }
 
         Ok(())
