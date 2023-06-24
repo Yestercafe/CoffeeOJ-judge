@@ -321,6 +321,7 @@ dependencies = [
  "actix-web",
  "log",
  "nix",
+ "once_cell",
  "serde",
  "tokio",
  "toml",

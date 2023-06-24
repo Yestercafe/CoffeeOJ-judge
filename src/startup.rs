@@ -8,8 +8,8 @@ pub struct WebApp {
     port: u16,
 }
 
-pub static HOST: &str = "localhost";
-pub static PORT: &str = "7000";
+pub static HOST: &str = "0.0.0.0";
+pub static PORT: &str = "4514";
 
 impl WebApp {
     pub async fn new() -> Result<Self, std::io::Error> {
@@ -34,7 +34,9 @@ pub fn create_server(listener: TcpListener) -> Result<Server, std::io::Error> {
         App::new()
             .wrap(TracingLogger::default())
             .route("/", web::get().to(crate::routes::index))
-    })
+            .route("/api/v1/submit", web::post().to(crate::routes::api::submit))
+        }
+    )
     .listen(listener)?
     .run();
     Ok(server)

@@ -3,8 +3,10 @@ use std::{collections::BTreeMap, fs};
 use coffee_oj_judger::{
     file::{get_pairwise_testcase_files, TestcaseFile},
     runner::Runner,
-    startup::WebApp, utils,
+    startup::WebApp,
+    utils,
 };
+use once_cell::sync::Lazy;
 
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
