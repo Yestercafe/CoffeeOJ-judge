@@ -3,7 +3,11 @@ use std::fs;
 use actix_web::{web, HttpResponse};
 use once_cell::sync::Lazy;
 
-use crate::{models::{self, CODE_EXT}, runner::Runner, file::{TestcaseFile, get_pairwise_testcase_files}};
+use crate::{
+    file::{get_pairwise_testcase_files, TestcaseFile},
+    models::{self, CODE_EXT},
+    runner::Runner,
+};
 
 static RUNNER: Lazy<Runner> = Lazy::new(Default::default);
 
@@ -42,7 +46,10 @@ pub async fn submit(form: web::Json<models::Submission>) -> HttpResponse {
         }
     }
     let pairwise_testcase_files = get_pairwise_testcase_files(testcase_files);
-    let ret = format!("{:?}", RUNNER.execute(&source_path, lang, &pairwise_testcase_files));
+    let ret = format!(
+        "{:?}",
+        RUNNER.execute(&source_path, lang, &pairwise_testcase_files)
+    );
 
     fs::remove_file(source_path).unwrap();
 

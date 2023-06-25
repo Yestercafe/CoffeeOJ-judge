@@ -83,10 +83,12 @@ impl Runner {
         testcases: &Vec<Testcase>,
     ) -> Result<(), JudgerErr> {
         let compiler_ret = self.compiler.compile(src_path, lang);
+        let mut is_interpret_lang = false;
         if let Err(RunnerErr::MissingConfig) = compiler_ret {
             return Err(JudgerErr::InternalError(RunnerErr::MissingConfig));
         } else if let Err(RunnerErr::MissingCompConfig(_)) = compiler_ret {
             println!("Lang `{}` doesn't need to compile, run directly.", lang);
+            is_interpret_lang = true;
         } else if let Err(RunnerErr::CompErr(info)) = compiler_ret {
             return Err(JudgerErr::CompilationError(info));
         }
@@ -166,8 +168,10 @@ impl Runner {
             println!("===== Testcase {} was done", i);
         }
 
-        let target_path = format!("./{}{}", src_path, crate::runner::EXECUABLE_SUFFIX);
-        fs::remove_file(target_path).unwrap();
+        if !is_interpret_lang {
+            let target_path = format!("./{}{}", src_path, crate::runner::EXECUABLE_SUFFIX);
+            let _ = fs::remove_file(target_path);
+        }
 
         if wrong_cnt == 0 {
             Ok(())
