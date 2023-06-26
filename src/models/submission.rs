@@ -12,6 +12,17 @@ pub static CODE_EXT: Lazy<BTreeMap<&'static str, &'static str>> = Lazy::new(|| {
     ])
 });
 
+#[derive(Clone, Copy)]
+pub enum SubmissionStatus {
+    Accepted = 0,
+    WrongAnswer,
+    CompilationError,
+    RuntimeError,
+    TimeLimitExceeded,
+    MemoLimitExceeded,
+    UnknownError,
+}
+
 #[derive(Default, Debug, Serialize, Deserialize)]
 pub struct Submission {
     pub source: String,

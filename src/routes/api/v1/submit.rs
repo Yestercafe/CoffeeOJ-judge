@@ -1,15 +1,24 @@
 use std::fs;
 
-use actix_web::{web, HttpResponse};
+use actix_web::{http::StatusCode, rt::Runtime, web, HttpResponse};
 use once_cell::sync::Lazy;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     file::{get_pairwise_testcase_files, TestcaseFile},
-    models::{self, CODE_EXT},
+    judger::JudgerErr,
+    models::{self, SubmissionStatus, CODE_EXT},
     runner::Runner,
 };
 
 static RUNNER: Lazy<Runner> = Lazy::new(Default::default);
+
+type SubmissionStatusCode = i16;
+#[derive(Serialize, Deserialize)]
+struct SubmitRet {
+    status: SubmissionStatusCode,
+    info: String,
+}
 
 #[tracing::instrument(
     name = "Submit code",
@@ -46,12 +55,20 @@ pub async fn submit(form: web::Json<models::Submission>) -> HttpResponse {
         }
     }
     let pairwise_testcase_files = get_pairwise_testcase_files(testcase_files);
-    let ret = format!(
-        "{:?}",
-        RUNNER.execute(&source_path, lang, &pairwise_testcase_files)
-    );
+    let exec_result = RUNNER.execute(&source_path, lang, &pairwise_testcase_files);
+    let ret_status = match exec_result {
+        Ok(()) => SubmissionStatus::Accepted,
+        Err(JudgerErr::WrongAnswer(_, _)) => SubmissionStatus::WrongAnswer,
+        Err(JudgerErr::RuntimeError(_)) => SubmissionStatus::RuntimeError,
+        Err(JudgerErr::CompilationError(_)) => SubmissionStatus::CompilationError,
+        _ => SubmissionStatus::UnknownError,
+    } as SubmissionStatusCode;
+    let ret = SubmitRet {
+        status: ret_status,
+        info: format!("{:?}", exec_result),
+    };
 
     fs::remove_file(source_path).unwrap();
 
-    HttpResponse::Ok().body(ret)
+    HttpResponse::Ok().json(ret)
 }
