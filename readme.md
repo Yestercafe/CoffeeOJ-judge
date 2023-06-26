@@ -18,6 +18,18 @@ Need tmux, please install by using instructions like `sudo apt install tmux` or 
 ./startup.sh
 ```
 
+Print beautiful log with bunyan:
+
+```
+npm install bunyan
+```
+
+Then run this project with bunyan:
+
+```
+cargo run | ./node_modules/bunyan/bin/bunyan
+```
+
 ## API
 
 POST 127.0.0.1:4514/api/v1/submit:
