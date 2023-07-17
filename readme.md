@@ -1,4 +1,4 @@
-# CoffeeOJ-judger
+# CoffeeOJ-judge
 
 ## Build & Run
 

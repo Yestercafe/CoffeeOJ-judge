@@ -1,6 +1,6 @@
 pub mod compiler;
 pub mod file;
-pub mod judger;
+pub mod judge;
 pub mod runner;
 
 // part of actix

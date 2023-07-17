@@ -6,7 +6,7 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     file::{get_pairwise_testcase_files, TestcaseFile},
-    judger::JudgerErr,
+    judge::JudgeErr,
     models::{self, SubmissionStatus, CODE_EXT},
     runner::Runner,
 };
@@ -58,9 +58,9 @@ pub async fn submit(form: web::Json<models::Submission>) -> HttpResponse {
     let exec_result = RUNNER.execute(&source_path, lang, &pairwise_testcase_files);
     let ret_status = match exec_result {
         Ok(()) => SubmissionStatus::Accepted,
-        Err(JudgerErr::WrongAnswer(_, _)) => SubmissionStatus::WrongAnswer,
-        Err(JudgerErr::RuntimeError(_)) => SubmissionStatus::RuntimeError,
-        Err(JudgerErr::CompilationError(_)) => SubmissionStatus::CompilationError,
+        Err(JudgeErr::WrongAnswer(_, _)) => SubmissionStatus::WrongAnswer,
+        Err(JudgeErr::RuntimeError(_)) => SubmissionStatus::RuntimeError,
+        Err(JudgeErr::CompilationError(_)) => SubmissionStatus::CompilationError,
         _ => SubmissionStatus::UnknownError,
     } as SubmissionStatusCode;
     let ret = SubmitRet {

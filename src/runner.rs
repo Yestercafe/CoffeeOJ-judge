@@ -10,7 +10,7 @@ use toml::{Table, Value};
 use crate::{
     compiler::Compiler,
     file::{Testcase, TestcaseFile},
-    judger::{Judger, JudgerErr},
+    judge::{Judge, JudgeErr},
 };
 
 pub static CONFIG_PATH: &str = "config.toml";
@@ -81,22 +81,22 @@ impl Runner {
         src_path: &str,
         lang: &str,
         testcases: &Vec<Testcase>,
-    ) -> Result<(), JudgerErr> {
+    ) -> Result<(), JudgeErr> {
         let compiler_ret = self.compiler.compile(src_path, lang);
         let mut is_interpret_lang = false;
         if let Err(RunnerErr::MissingConfig) = compiler_ret {
-            return Err(JudgerErr::InternalError(RunnerErr::MissingConfig));
+            return Err(JudgeErr::InternalError(RunnerErr::MissingConfig));
         } else if let Err(RunnerErr::MissingCompConfig(_)) = compiler_ret {
             println!("Lang `{}` doesn't need to compile, run directly.", lang);
             is_interpret_lang = true;
         } else if let Err(RunnerErr::CompErr(info)) = compiler_ret {
-            return Err(JudgerErr::CompilationError(info));
+            return Err(JudgeErr::CompilationError(info));
         }
 
         let gen_exec_ret = self.generate_execution_instruction(src_path, lang);
         let exec_instrs = match gen_exec_ret {
             Ok(instrs) => instrs,
-            Err(e) => return Err(JudgerErr::InternalError(e)),
+            Err(e) => return Err(JudgeErr::InternalError(e)),
         }
         .iter()
         .map(|rstr| CString::new(rstr.as_str()).unwrap())
@@ -152,14 +152,14 @@ impl Runner {
 
             // stdout => xxx.in.stdout
             // judge:
-            match Judger::judge(&stdout_testcase_file, &testcase.output_file) {
+            match Judge::judge(&stdout_testcase_file, &testcase.output_file) {
                 Ok(true) => {}
                 Ok(false) => wrong_cnt += 1,
                 Err(err) => println!("====? Errno: {}", err),
             };
 
             fs::remove_file(stdout_testcase_file.get_path()).map_err(|_| {
-                JudgerErr::InternalError(RunnerErr::UnknownErr(format!(
+                JudgeErr::InternalError(RunnerErr::UnknownErr(format!(
                     "can't delete file `{}`",
                     stdout_testcase_file.get_path()
                 )))
@@ -176,7 +176,7 @@ impl Runner {
         if wrong_cnt == 0 {
             Ok(())
         } else {
-            Err(JudgerErr::WrongAnswer(
+            Err(JudgeErr::WrongAnswer(
                 testcases.len() - wrong_cnt,
                 testcases.len(),
             ))

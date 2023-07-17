@@ -1,16 +1,15 @@
 use std::{collections::BTreeMap, fs};
 
-use coffee_oj_judger::{
+use coffee_oj_judge::{
     file::{get_pairwise_testcase_files, TestcaseFile},
     runner::Runner,
     startup::WebApp,
     utils,
 };
-use once_cell::sync::Lazy;
 
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {
-    utils::telemetry::setup_log("coj_judger", "info", std::io::stdout);
+    utils::telemetry::setup_log("coj_judge", "info", std::io::stdout);
     let web_app = WebApp::new().await?;
     web_app.run().await?;
     Ok(())

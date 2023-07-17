@@ -1,5 +1,5 @@
 [package]
-name = "coffee_oj_judger"
+name = "coffee_oj_judge"
 version = "0.1.0"
 edition = "2021"
 
@@ -8,7 +8,7 @@ path = "src/lib.rs"
 
 [[bin]]
 path = "src/main.rs"
-name = "coffee_oj_judger"
+name = "coffee_oj_judge"
 
 [dependencies]
 nix = "0.26.2"

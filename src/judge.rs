@@ -3,7 +3,7 @@ use std::{fmt::Debug, fs};
 use crate::{file::TestcaseFile, runner::RunnerErr};
 
 #[derive(Debug, PartialEq, PartialOrd, Eq, Ord, Clone)]
-pub enum JudgerErr {
+pub enum JudgeErr {
     // WrongAnswer(#passed testcases, #testcases)
     WrongAnswer(usize, usize),
     RuntimeError(String),
@@ -83,9 +83,9 @@ impl Debug for Differ {
     }
 }
 
-pub struct Judger {}
+pub struct Judge {}
 
-impl Judger {
+impl Judge {
     pub fn judge(
         stdout_file: &TestcaseFile,
         preset_output_file: &TestcaseFile,

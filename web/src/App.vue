@@ -39,7 +39,7 @@ export default {
   <header>
   </header>
   <main>
-    <h1>CoffeeOJ Judger</h1>
+    <h1>CoffeeOJ Judge</h1>
     <div style="display: block;">
       <div class="item">
         <label for="problem_id">Problem ID: </label>
