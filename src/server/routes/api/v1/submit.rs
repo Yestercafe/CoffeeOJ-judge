@@ -4,10 +4,10 @@ use actix_web::{http::StatusCode, rt::Runtime, web, HttpResponse};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 
-use crate::{
+use crate::server::models::{self, SubmissionStatus, CODE_EXT};
+use crate::judge::{
     file::{get_pairwise_testcase_files, TestcaseFile},
     judge::JudgeErr,
-    models::{self, SubmissionStatus, CODE_EXT},
     runner::Runner,
 };
 
@@ -30,7 +30,7 @@ struct SubmitRet {
 )]
 pub async fn submit(form: web::Json<models::Submission>) -> HttpResponse {
     // initialize static objects
-    Lazy::force(&crate::models::CODE_EXT);
+    Lazy::force(&crate::server::models::CODE_EXT);
     Lazy::force(&RUNNER);
 
     // create the source code file

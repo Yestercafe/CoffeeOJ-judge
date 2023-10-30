@@ -9,7 +9,7 @@ use nix::{
 };
 use toml::{Table, Value};
 
-use crate::runner::RunnerErr;
+use crate::judge::runner::RunnerErr;
 
 pub struct Compiler {
     pub compilers: BTreeMap<String, Vec<String>>,
@@ -26,7 +26,7 @@ impl Compiler {
             return Err(RunnerErr::MissingConfig);
         }
 
-        let target_path = format!("{}{}", src_path, crate::runner::EXECUABLE_SUFFIX);
+        let target_path = format!("{}{}", src_path, crate::judge::runner::EXECUABLE_SUFFIX);
         let instrs = match self.compilers.get(lang) {
             Some(ins) => ins.clone(),
             None => {
@@ -127,7 +127,7 @@ impl Compiler {
 
 impl Default for Compiler {
     fn default() -> Self {
-        let config_str = match fs::read_to_string(crate::runner::CONFIG_PATH) {
+        let config_str = match fs::read_to_string(crate::judge::runner::CONFIG_PATH) {
             Ok(string) => string,
             Err(err) => panic!("Config missing: {}", err),
         };

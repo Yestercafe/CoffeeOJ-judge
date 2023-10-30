@@ -7,7 +7,7 @@ use nix::{
 };
 use toml::{Table, Value};
 
-use crate::{
+use crate::judge::{
     compiler::Compiler,
     file::{Testcase, TestcaseFile},
     judge::{Judge, JudgeErr},
@@ -49,7 +49,7 @@ impl Runner {
             return Err(RunnerErr::MissingConfig);
         }
 
-        let target_path = format!("./{}{}", src_path, crate::runner::EXECUABLE_SUFFIX);
+        let target_path = format!("./{}{}", src_path, crate::judge::runner::EXECUABLE_SUFFIX);
         let instrs = match self.run_recipe.get(lang) {
             Some(ins) => ins.clone(),
             None => {
@@ -169,7 +169,7 @@ impl Runner {
         }
 
         if !is_interpret_lang {
-            let target_path = format!("./{}{}", src_path, crate::runner::EXECUABLE_SUFFIX);
+            let target_path = format!("./{}{}", src_path, crate::judge::runner::EXECUABLE_SUFFIX);
             let _ = fs::remove_file(target_path);
         }
 
@@ -186,7 +186,7 @@ impl Runner {
 
 impl Default for Runner {
     fn default() -> Self {
-        let config_str = match fs::read_to_string(crate::runner::CONFIG_PATH) {
+        let config_str = match fs::read_to_string(crate::judge::runner::CONFIG_PATH) {
             Ok(string) => string,
             Err(err) => panic!("{}", err),
         };

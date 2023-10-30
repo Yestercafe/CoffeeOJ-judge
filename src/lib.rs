@@ -1,10 +1,2 @@
-pub mod compiler;
-pub mod file;
 pub mod judge;
-pub mod runner;
-
-// part of actix
-pub mod models;
-pub mod routes;
-pub mod startup;
-pub mod utils;
+pub mod server;

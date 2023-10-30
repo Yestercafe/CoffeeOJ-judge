@@ -1,6 +1,6 @@
 use std::{fmt::Debug, fs};
 
-use crate::{file::TestcaseFile, runner::RunnerErr};
+use crate::{judge::file::TestcaseFile, judge::runner::RunnerErr};
 
 #[derive(Debug, PartialEq, PartialOrd, Eq, Ord, Clone)]
 pub enum JudgeErr {
