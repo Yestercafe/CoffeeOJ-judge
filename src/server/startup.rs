@@ -34,7 +34,10 @@ pub fn create_server(listener: TcpListener) -> Result<Server, std::io::Error> {
         App::new()
             .wrap(TracingLogger::default())
             .route("/", web::get().to(crate::server::routes::index))
-            .route("/api/v1/submit", web::post().to(crate::server::routes::api::submit))
+            .route(
+                "/api/v1/submit",
+                web::post().to(crate::server::routes::api::submit),
+            )
     })
     .listen(listener)?
     .run();

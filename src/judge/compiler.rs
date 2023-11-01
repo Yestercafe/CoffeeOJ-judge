@@ -1,6 +1,11 @@
 #![allow(clippy::missing_safety_doc)]
 
-use std::{collections::BTreeMap, ffi::CString, fmt::Debug, fs, path};
+use std::{
+    collections::{BTreeMap, HashMap},
+    ffi::CString,
+    fmt::Debug,
+    fs, path,
+};
 
 use nix::{
     libc,
@@ -9,7 +14,9 @@ use nix::{
 };
 use toml::{Table, Value};
 
-use crate::judge::runner::RunnerErr;
+use crate::{c_string, c_string_ptr, judge::runner::RunnerErr};
+
+use super::file::SavedSource;
 
 pub struct Compiler {
     pub compilers: BTreeMap<String, Vec<String>>,
@@ -166,5 +173,97 @@ impl Debug for Compiler {
             f.write_str(format!("{:?} {:?}\n", kv.0, kv.1).as_str())?;
         }
         Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub enum Error {
+    LanguageNotFoundError,
+    ForkFailed,
+    NoCompilationLogError,
+    CompilationError(String),
+}
+
+pub struct Compiler2 {
+    pub compiling_recipe: HashMap<String, Vec<String>>,
+}
+
+impl Compiler2 {
+    fn new() -> Compiler2 {
+        Compiler2 {
+            compiling_recipe: HashMap::new(),
+        }
+    }
+
+    fn generate_compilation_command(
+        &self,
+        source: &SavedSource,
+        lang: &str,
+    ) -> Result<(String, Vec<CString>), Error> {
+        let command_chain = match self.compiling_recipe.get(lang) {
+            Some(chain) => chain,
+            _ => return Err(Error::LanguageNotFoundError),
+        };
+        let target_full_path = format!("{}.exe", source.get_full_path());
+
+        let mut command = Vec::<CString>::new();
+        for token in command_chain {
+            let mut token: &str = token;
+            if token.starts_with("$") {
+                let (_, var) = token.split_at(0);
+                match var {
+                    "source" => token = source.get_full_path(),
+                    "target" => token = &target_full_path,
+                    _ => { /* do nothing */ }
+                }
+            }
+            command.push(c_string!(token));
+        }
+
+        Ok((target_full_path, command))
+    }
+
+    pub fn compile(&self, source: &SavedSource, lang: &str) -> Result<String, Error> {
+        let (target_full_path, command) = self.generate_compilation_command(source, lang)?;
+        if command.is_empty() {
+            return Ok(String::from(source.get_full_path()));
+        }
+        dbg!(&command);
+        let log_path = format!("{target_full_path}.log");
+
+        match unsafe { fork() } {
+            Ok(ForkResult::Parent { child, .. }) => {
+                waitpid(child, None).unwrap();
+            }
+            Ok(ForkResult::Child) => {
+                let log_path = c_string_ptr!(log_path);
+                let w_mode = c_string_ptr!("w");
+
+                unsafe {
+                    // open a log file to read in compilation log
+                    let log_output = libc::fdopen(libc::STDERR_FILENO, w_mode);
+                    libc::freopen(log_path, w_mode, log_output);
+                }
+
+                match execvp(&command[0], &command) {
+                    Ok(_) => unreachable!(),
+                    Err(errno) => write(
+                        libc::STDERR_FILENO,
+                        format!("Execvp error, errno = {:?}\n", errno).as_bytes(),
+                    )
+                    .ok(),
+                };
+
+                unsafe { libc::exit(0) };
+            }
+            _ => return Err(Error::ForkFailed),
+        }
+
+        let log_content = fs::read_to_string(log_path).map_err(|_| Error::NoCompilationLogError)?;
+        if log_content.is_empty() {
+            Ok(target_full_path)
+        } else {
+            Err(Error::CompilationError(log_content))
+        }
     }
 }

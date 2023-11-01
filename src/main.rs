@@ -1,13 +1,10 @@
 use std::{collections::BTreeMap, fs};
 
 use coffee_oj_judge::judge::{
-    runner::Runner,
     file::{get_pairwise_testcase_files, TestcaseFile},
+    runner::Runner,
 };
-use coffee_oj_judge::server::{
-    startup::WebApp,
-    utils,
-};
+use coffee_oj_judge::server::{startup::WebApp, utils};
 
 #[tokio::main]
 async fn main() -> Result<(), std::io::Error> {

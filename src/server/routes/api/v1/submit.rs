@@ -4,12 +4,12 @@ use actix_web::{http::StatusCode, rt::Runtime, web, HttpResponse};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 
-use crate::server::models::{self, SubmissionStatus, CODE_EXT};
 use crate::judge::{
     file::{get_pairwise_testcase_files, TestcaseFile},
     judge::JudgeErr,
     runner::Runner,
 };
+use crate::server::models::{self, SubmissionStatus, CODE_EXT};
 
 static RUNNER: Lazy<Runner> = Lazy::new(Default::default);
 
