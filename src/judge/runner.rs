@@ -177,6 +177,9 @@ impl Runner {
 
         // TODO need to refactor
         // =====================================================================
+        let r_mode = c_string!("r");
+        let w_mode = c_string!("w");
+
         let mut wrong_cnt = 0usize;
         for (i, testcase) in testcases.iter().enumerate() {
             let input_testcase = &testcase.input_file;
@@ -186,22 +189,23 @@ impl Runner {
             );
 
             println!("===== Testing `{:?}`, id: {}", input_testcase, i);
+            let errout_path = format!("{}.stderr", input_testcase.get_path());
             match unsafe { unistd::fork() } {
                 Ok(ForkResult::Parent { child }) => {
                     waitpid(child, None).unwrap();
                 }
                 Ok(ForkResult::Child) => {
                     let input_path = c_string!(input_testcase.get_path());
-                    let output_path =
-                        c_string!(format!("{}.stdout", input_testcase.get_path()).as_str());
-                    let r_mode = c_string!("r");
-                    let w_mode = c_string!("w");
-
+                    let output_path = c_string!(format!("{}.stdout", input_testcase.get_path()).as_str());
+                    let errout_path = c_string!(errout_path.as_str());
+                    
                     unsafe {
                         let stdin = libc::fdopen(libc::STDIN_FILENO, r_mode.as_ptr());
                         libc::freopen(input_path.as_ptr(), r_mode.as_ptr(), stdin);
                         let stdout = libc::fdopen(libc::STDOUT_FILENO, w_mode.as_ptr());
                         libc::freopen(output_path.as_ptr(), w_mode.as_ptr(), stdout);
+                        let stderr = libc::fdopen(libc::STDERR_FILENO, w_mode.as_ptr());
+                        libc::freopen(errout_path.as_ptr(), w_mode.as_ptr(), stderr);
                     }
 
                     match unistd::execvp(&command[0], &command) {
@@ -221,6 +225,12 @@ impl Runner {
                     }
                 }
                 _ => panic!("Fork failed"),
+            }
+
+            // TODO clean stdout and stderr
+            let err_content = fs::read_to_string(errout_path).map_err(|_| Error::FileSystemError)?;
+            if !err_content.is_empty() {
+                return Ok(Answer::new(JudgeStatus::RuntimeError(err_content), 0, 0));
             }
 
             // stdout => xxx.in.stdout

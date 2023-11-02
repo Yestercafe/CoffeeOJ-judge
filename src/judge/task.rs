@@ -61,7 +61,7 @@ impl Task {
 
         let answer = match runner.execute(&executable_path, &self.lang, &testcases) {
             Ok(a) => a,
-            Err(e) => return JudgeStatus::RuntimeError(format!("{:?}", e)),
+            Err(e) => return JudgeStatus::UnknownError(format!("{:?}", e)),
         };
 
         // 4. remove compilation intermediate files (runner.clean)
