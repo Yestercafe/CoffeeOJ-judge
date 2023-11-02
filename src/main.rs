@@ -1,8 +1,14 @@
-use coffee_oj_judge::judge::{compiler, runner, task};
+use coffee_oj_judge::judge::{compiler, runner, task, self};
 use coffee_oj_judge::server::{startup::WebApp, utils};
+use once_cell::sync::Lazy;
+
+fn init_lazy() {
+    Lazy::force(&judge::consts::LANG_EXTENSIONS);
+}
 
 // #[tokio::main]
 async fn _tokio_main() -> Result<(), std::io::Error> {
+    init_lazy();
     utils::telemetry::setup_log("coj_judge", "info", std::io::stdout);
     let web_app = WebApp::new().await?;
     web_app.run().await?;
@@ -10,6 +16,8 @@ async fn _tokio_main() -> Result<(), std::io::Error> {
 }
 
 fn main() {
+    init_lazy();
+
     let a_task = task::Task::new(
         1,
         "assets/1",
