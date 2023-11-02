@@ -30,12 +30,12 @@ pub struct Submission {
     pub problem_id: String,
 }
 
-impl Submission {
-    fn new(source: &str, lang: &str, problem_id: &str) -> Self {
-        Self {
-            source: String::from(source),
-            lang: String::from(lang),
-            problem_id: String::from(problem_id),
-        }
-    }
-}
+// impl Submission {
+//     fn new(source: &str, lang: &str, problem_id: &str) -> Self {
+//         Self {
+//             source: String::from(source),
+//             lang: String::from(lang),
+//             problem_id: String::from(problem_id),
+//         }
+//     }
+// }

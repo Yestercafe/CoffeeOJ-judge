@@ -1,7 +1,5 @@
 use std::{collections::BTreeMap, fmt::Debug, fs::File, io::Write};
 
-use crate::judge::file;
-
 use super::consts::{LANG_EXTENSIONS, SOURCE_CODE_SAVED_PATH};
 
 #[derive(Clone)]
@@ -99,15 +97,13 @@ pub fn get_pairwise_testcase_files(testcase_files: Vec<TestcaseFile>) -> Vec<Tes
 
 pub struct SavedSource {
     submission_id: u64,
-    filename: String,
     full_path: String,
 }
 
 impl SavedSource {
-    fn new(submission_id: u64, filename: String, full_path: String) -> SavedSource {
+    fn new(submission_id: u64, full_path: String) -> SavedSource {
         SavedSource {
             submission_id,
-            filename,
             full_path,
         }
     }
@@ -137,5 +133,5 @@ pub fn save_source_code(source_code: &str, lang: &str) -> Result<SavedSource, St
     file.write_all(source_code.as_bytes())
         .map_err(|_| "Can't write to file".to_string())?;
 
-    Ok(SavedSource::new(submission_id, filename, full_path))
+    Ok(SavedSource::new(submission_id, full_path))
 }

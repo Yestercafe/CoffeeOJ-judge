@@ -1,6 +1,8 @@
 use std::{fmt::Debug, fs};
 
-use crate::{judge::file::TestcaseFile, judge::runner::RunnerErr};
+use crate::judge::file::TestcaseFile;
+
+use super::runner;
 
 #[derive(Debug, PartialEq, PartialOrd, Eq, Ord, Clone)]
 pub enum JudgeErr {
@@ -8,7 +10,7 @@ pub enum JudgeErr {
     WrongAnswer(usize, usize),
     RuntimeError(String),
     CompilationError(String),
-    InternalError(RunnerErr),
+    InternalError(runner::Error),
 }
 
 pub struct Differ {

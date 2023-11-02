@@ -1,35 +1,22 @@
-use crate::server::models::submission;
+use std::fs;
 
 use super::{
     compiler,
-    file::{self, Testcase},
-    judge::{Judge, JudgeErr},
-    runner::{self, Runner},
+    file::{self, get_pairwise_testcase_files, TestcaseFile},
+    judge::JudgeErr,
+    runner,
 };
 
-struct Task {
+pub struct Task {
+    #[allow(dead_code)]
     problem_id: u64,
     testcases_path: String,
     lang: String,
     source_code: String,
 }
 
-struct SaveRet {
-    submission_id: u64,
-    source_path: String,
-}
-
-impl SaveRet {
-    fn new(submission_id: u64, source_path: &str) -> SaveRet {
-        SaveRet {
-            submission_id,
-            source_path: String::from(source_path),
-        }
-    }
-}
-
 impl Task {
-    fn new(problem_id: u64, testcases_path: &str, lang: &str, source_code: &str) -> Task {
+    pub fn new(problem_id: u64, testcases_path: &str, lang: &str, source_code: &str) -> Task {
         Task {
             problem_id,
             testcases_path: String::from(testcases_path),
@@ -38,13 +25,14 @@ impl Task {
         }
     }
 
-    fn execute(
+    pub fn execute(
         self,
-        compiler: &compiler::Compiler2,
-        runner: &runner::Runner2,
+        compiler: &compiler::Compiler,
+        runner: &runner::Runner,
     ) -> Result<(), JudgeErr> {
         // 1. save source code to file
         let save_ret = file::save_source_code(&self.source_code, &self.lang).map_err(|_| {
+            // TODO
             // update database: FileSystemError
             JudgeErr::WrongAnswer(1, 2)
         })?;
@@ -62,17 +50,20 @@ impl Task {
             })?;
 
         // 3. run (runner.execute)
-        let testcases: Vec<Testcase> = Vec::new(); // TODO
+        let lst_read_dir = fs::read_dir(&self.testcases_path);
+        let mut testcase_files: Vec<TestcaseFile> = vec![];
+        if let Ok(lst_read_dir) = lst_read_dir {
+            for dir in lst_read_dir {
+                let path = format!("{}", dir.unwrap().path().display());
+                let sp = path.split_at(&self.testcases_path.len() + 1);
+                testcase_files.push(TestcaseFile::new(sp.1, &path));
+            }
+        }
+        let testcases = get_pairwise_testcase_files(testcase_files);
+
         let answer = runner
             .execute(&executable_path, &self.lang, &testcases)
-            .map_err(|e| match e {
-                runner::Error::CommandEmptyError
-                | runner::Error::FileSystemError
-                | runner::Error::ForkFailed
-                | runner::Error::LanguageNotFoundError => {
-                    JudgeErr::InternalError(runner::RunnerErr::UnknownErr(format!("{:?}", e)))
-                }
-            })?;
+            .map_err(|e| JudgeErr::InternalError(e))?;
 
         // 4. remove compilation intermediate files (runner.clean)
 

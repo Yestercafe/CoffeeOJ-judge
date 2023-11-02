@@ -1,32 +1,20 @@
-use std::{collections::BTreeMap, ffi::CString, fs, path};
+use std::{collections::BTreeMap, ffi::CString, fs};
 
 use nix::{
     libc,
     sys::wait::waitpid,
-    unistd::{self, fork, ForkResult},
+    unistd::{self, ForkResult},
 };
 use toml::{Table, Value};
 
 use crate::{
-    c_string, c_string_ptr,
+    c_string,
     judge::{
-        compiler::Compiler,
+        consts::CONFIG_PATH,
         file::{Testcase, TestcaseFile},
-        judge::{Judge, JudgeErr},
+        judge::Judge,
     },
 };
-
-pub static CONFIG_PATH: &str = "config.toml";
-pub static EXECUABLE_SUFFIX: &str = ".exe";
-
-#[derive(Debug, PartialEq, PartialOrd, Eq, Ord, Clone)]
-pub enum RunnerErr {
-    MissingConfig,
-    MissingCompConfig(String),
-    MissingExecConfig(String),
-    CompErr(String),
-    UnknownErr(String),
-}
 
 #[derive(Debug, PartialEq, PartialOrd, Eq, Ord, Clone)]
 pub enum FileType {
@@ -36,198 +24,7 @@ pub enum FileType {
     File(String),
 }
 
-pub struct Runner {
-    compiler: Compiler,
-    run_recipe: BTreeMap<String, Vec<String>>,
-}
-
-impl Runner {
-    fn generate_execution_instruction(
-        &self,
-        src_path: &str,
-        lang: &str,
-    ) -> Result<Vec<String>, RunnerErr> {
-        let path = path::Path::new(&src_path);
-        if !path.exists() {
-            return Err(RunnerErr::MissingConfig);
-        }
-
-        let target_path = format!("./{}{}", src_path, crate::judge::runner::EXECUABLE_SUFFIX);
-        let instrs = match self.run_recipe.get(lang) {
-            Some(ins) => ins.clone(),
-            None => {
-                return Err(RunnerErr::MissingExecConfig(format!(
-                    "Lang `{}` is not supported.",
-                    lang
-                )))
-            }
-        };
-
-        Ok(instrs
-            .iter()
-            .map(|instr| {
-                if instr.starts_with('$') {
-                    match instr.split_at(1).1 {
-                        "target" => target_path.clone(),
-                        "source" => src_path.into(),
-                        _ => panic!("never reach"),
-                    }
-                } else {
-                    instr.clone()
-                }
-            })
-            .collect::<Vec<_>>())
-    }
-
-    pub fn execute(
-        &self,
-        src_path: &str,
-        lang: &str,
-        testcases: &Vec<Testcase>,
-    ) -> Result<(), JudgeErr> {
-        let compiler_ret = self.compiler.compile(src_path, lang);
-        let mut is_interpret_lang = false;
-        if let Err(RunnerErr::MissingConfig) = compiler_ret {
-            return Err(JudgeErr::InternalError(RunnerErr::MissingConfig));
-        } else if let Err(RunnerErr::MissingCompConfig(_)) = compiler_ret {
-            println!("Lang `{}` doesn't need to compile, run directly.", lang);
-            is_interpret_lang = true;
-        } else if let Err(RunnerErr::CompErr(info)) = compiler_ret {
-            return Err(JudgeErr::CompilationError(info));
-        }
-
-        let gen_exec_ret = self.generate_execution_instruction(src_path, lang);
-        let exec_instrs = match gen_exec_ret {
-            Ok(instrs) => instrs,
-            Err(e) => return Err(JudgeErr::InternalError(e)),
-        }
-        .iter()
-        .map(|rstr| CString::new(rstr.as_str()).unwrap())
-        .collect::<Vec<_>>();
-
-        println!("{:?}", exec_instrs);
-
-        let mut wrong_cnt = 0usize;
-        for (i, testcase) in testcases.iter().enumerate() {
-            let input_testcase = &testcase.input_file;
-            let stdout_testcase_file = TestcaseFile::new(
-                format!("{}.stdout", input_testcase.get_name()).as_str(),
-                format!("{}.stdout", input_testcase.get_path()).as_str(),
-            );
-
-            println!("===== Testing `{:?}`, id: {}", input_testcase, i);
-            match unsafe { unistd::fork() } {
-                Ok(ForkResult::Parent { child }) => {
-                    waitpid(child, None).unwrap();
-                }
-                Ok(ForkResult::Child) => {
-                    let input_path = CString::new(input_testcase.get_path()).unwrap();
-                    let output_path =
-                        CString::new(format!("{}.stdout", input_testcase.get_path())).unwrap();
-                    let r_mode = CString::new("r").unwrap();
-                    let w_mode = CString::new("w").unwrap();
-
-                    unsafe {
-                        let stdin = libc::fdopen(libc::STDIN_FILENO, r_mode.as_ptr());
-                        libc::freopen(input_path.as_ptr(), r_mode.as_ptr(), stdin);
-                        let stdout = libc::fdopen(libc::STDOUT_FILENO, w_mode.as_ptr());
-                        libc::freopen(output_path.as_ptr(), w_mode.as_ptr(), stdout);
-                    }
-
-                    match unistd::execvp(&exec_instrs[0], &exec_instrs) {
-                        Ok(_) => unreachable!(),
-                        Err(errno) => unistd::write(
-                            libc::STDERR_FILENO,
-                            format!(
-                                "Execvp error, errno = {:?}, input testcase file: {:?}\n",
-                                errno, input_testcase
-                            )
-                            .as_bytes(),
-                        )
-                        .ok(),
-                    };
-                    unsafe {
-                        libc::exit(0);
-                    }
-                }
-                _ => panic!("Fork failed"),
-            }
-
-            // stdout => xxx.in.stdout
-            // judge:
-            match Judge::judge(&stdout_testcase_file, &testcase.output_file) {
-                Ok(true) => {}
-                Ok(false) => wrong_cnt += 1,
-                Err(err) => println!("====? Errno: {}", err),
-            };
-
-            fs::remove_file(stdout_testcase_file.get_path()).map_err(|_| {
-                JudgeErr::InternalError(RunnerErr::UnknownErr(format!(
-                    "can't delete file `{}`",
-                    stdout_testcase_file.get_path()
-                )))
-            })?;
-
-            println!("===== Testcase {} was done", i);
-        }
-
-        if !is_interpret_lang {
-            let target_path = format!("./{}{}", src_path, crate::judge::runner::EXECUABLE_SUFFIX);
-            let _ = fs::remove_file(target_path);
-        }
-
-        if wrong_cnt == 0 {
-            Ok(())
-        } else {
-            Err(JudgeErr::WrongAnswer(
-                testcases.len() - wrong_cnt,
-                testcases.len(),
-            ))
-        }
-    }
-}
-
-impl Default for Runner {
-    fn default() -> Self {
-        let config_str = match fs::read_to_string(crate::judge::runner::CONFIG_PATH) {
-            Ok(string) => string,
-            Err(err) => panic!("{}", err),
-        };
-        let config: Table = toml::from_str(&config_str).unwrap();
-        let execute_table = &config["execute"];
-
-        let mut run_recipe: BTreeMap<String, Vec<String>> = BTreeMap::new();
-
-        match execute_table {
-            Value::Table(table) => {
-                for item in table.iter() {
-                    match item.1 {
-                        Value::Array(args) => {
-                            let mut arg_lst: Vec<String> = vec![];
-                            for arg in args {
-                                if let Value::String(arg) = arg {
-                                    arg_lst.push(arg.clone());
-                                }
-                            }
-                            run_recipe.insert(item.0.clone(), arg_lst);
-                        }
-                        _ => panic!("Error execute arguments structure in `config.toml`, should be an array")
-                    }
-                }
-            }
-            _ => {
-                panic!("Error token `execute` structure in file `config.toml`, should be a Table.")
-            }
-        }
-
-        Self {
-            compiler: Default::default(),
-            run_recipe,
-        }
-    }
-}
-
-#[derive(Debug)]
+#[derive(Debug, PartialEq, Eq, PartialOrd, Ord, Clone)]
 pub enum Error {
     ForkFailed,
     LanguageNotFoundError,
@@ -235,8 +32,8 @@ pub enum Error {
     FileSystemError,
 }
 
-pub struct Runner2 {
-    running_recipe: BTreeMap<String, Vec<String>>,
+pub struct Runner {
+    running_recipe: BTreeMap<String, Option<Vec<String>>>,
 }
 
 #[derive(Clone, Copy)]
@@ -277,10 +74,66 @@ impl Answer {
     }
 }
 
-impl Runner2 {
-    fn new() -> Runner2 {
-        Runner2 {
-            running_recipe: BTreeMap::new(),
+impl Runner {
+    pub fn new() -> Runner {
+        let mut recipe: BTreeMap<String, Option<Vec<String>>> = BTreeMap::new();
+
+        let config_text = match fs::read_to_string(&CONFIG_PATH) {
+            Ok(s) => s,
+            Err(e) => panic!("config: `{CONFIG_PATH}` is missing: {e}"),
+        };
+
+        let data: Table = match toml::from_str(&config_text) {
+            Ok(d) => d,
+            Err(e) => panic!("config: Can't read from `{CONFIG_PATH}`: {e}"),
+        };
+
+        let lang_lst = match data.get("languages") {
+            Some(v) => v,
+            _ => panic!("config: [languages] should be set correctly"),
+        };
+        let execution_commands = match data.get("execute") {
+            Some(v) => v,
+            _ => panic!("config: [execute] should be set correctly"),
+        };
+
+        match lang_lst {
+            Value::Array(lang_lst) => {
+                for lang in lang_lst {
+                    if let Value::String(lang) = lang {
+                        recipe.insert(lang.clone(), None);
+                    } else {
+                        panic!("config: [languages] should be set correctly");
+                    }
+                }
+            }
+            _ => panic!("config: [languages] should be set correctly"),
+        };
+
+        match execution_commands {
+            Value::Table(execution_commands) => {
+                for (lang, val) in execution_commands.iter() {
+                    if !recipe.contains_key(lang) {
+                        continue;
+                    }
+                    let val = match val {
+                        Value::String(val) => val,
+                        _ => panic!("config: [execute] should be set correctly"),
+                    };
+                    let command_chain: Vec<String> = val
+                        .split_ascii_whitespace()
+                        .map(|s| s.to_string())
+                        .collect();
+                    *recipe.get_mut(lang).unwrap() = Some(command_chain);
+                }
+            }
+            _ => panic!("config: [execute] should be set correctly"),
+        }
+
+        dbg!(&recipe);
+
+        Runner {
+            running_recipe: recipe,
         }
     }
 
@@ -290,7 +143,10 @@ impl Runner2 {
         lang: &str,
     ) -> Result<Vec<CString>, Error> {
         let command_chain = match self.running_recipe.get(lang) {
-            Some(chain) => chain,
+            Some(chain) => match chain {
+                Some(chain) => chain,
+                _ => return Err(Error::LanguageNotFoundError),
+            },
             _ => return Err(Error::LanguageNotFoundError),
         };
 
@@ -298,7 +154,7 @@ impl Runner2 {
         for token in command_chain {
             let mut token: &str = token;
             if token.starts_with("$") {
-                let (_, var) = token.split_at(0);
+                let (_, var) = token.split_at(1);
                 match var {
                     "target" | "source" => token = executable_path, // FIXME tricky opt for interpreted languages, should write a better parser instead
                     _ => { /* do nothing */ }
@@ -339,17 +195,17 @@ impl Runner2 {
                     waitpid(child, None).unwrap();
                 }
                 Ok(ForkResult::Child) => {
-                    let input_path = c_string_ptr!(input_testcase.get_path());
+                    let input_path = c_string!(input_testcase.get_path());
                     let output_path =
-                        c_string_ptr!(format!("{}.stdout", input_testcase.get_path()));
-                    let r_mode = c_string_ptr!("r");
-                    let w_mode = c_string_ptr!("w");
+                        c_string!(format!("{}.stdout", input_testcase.get_path()).as_str());
+                    let r_mode = c_string!("r");
+                    let w_mode = c_string!("w");
 
                     unsafe {
-                        let stdin = libc::fdopen(libc::STDIN_FILENO, r_mode);
-                        libc::freopen(input_path, r_mode, stdin);
-                        let stdout = libc::fdopen(libc::STDOUT_FILENO, w_mode);
-                        libc::freopen(output_path, w_mode, stdout);
+                        let stdin = libc::fdopen(libc::STDIN_FILENO, r_mode.as_ptr());
+                        libc::freopen(input_path.as_ptr(), r_mode.as_ptr(), stdin);
+                        let stdout = libc::fdopen(libc::STDOUT_FILENO, w_mode.as_ptr());
+                        libc::freopen(output_path.as_ptr(), w_mode.as_ptr(), stdout);
                     }
 
                     match unistd::execvp(&command[0], &command) {

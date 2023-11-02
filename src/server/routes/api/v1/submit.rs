@@ -1,17 +1,16 @@
 use std::fs;
 
-use actix_web::{http::StatusCode, rt::Runtime, web, HttpResponse};
+use actix_web::{web, HttpResponse};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 
 use crate::judge::{
     file::{get_pairwise_testcase_files, TestcaseFile},
-    judge::JudgeErr,
-    runner::Runner,
+    runner::{RunStatus, Runner},
 };
 use crate::server::models::{self, SubmissionStatus, CODE_EXT};
 
-static RUNNER: Lazy<Runner> = Lazy::new(Default::default);
+static RUNNER: Lazy<Runner> = Lazy::new(|| Runner::new());
 
 type SubmissionStatusCode = i16;
 #[derive(Serialize, Deserialize)]
@@ -56,16 +55,20 @@ pub async fn submit(form: web::Json<models::Submission>) -> HttpResponse {
     }
     let pairwise_testcase_files = get_pairwise_testcase_files(testcase_files);
     let exec_result = RUNNER.execute(&source_path, lang, &pairwise_testcase_files);
-    let ret_status = match exec_result {
-        Ok(()) => SubmissionStatus::Accepted,
-        Err(JudgeErr::WrongAnswer(_, _)) => SubmissionStatus::WrongAnswer,
-        Err(JudgeErr::RuntimeError(_)) => SubmissionStatus::RuntimeError,
-        Err(JudgeErr::CompilationError(_)) => SubmissionStatus::CompilationError,
+    let answer = match exec_result {
+        Ok(a) => match a.get_run_status() {
+            RunStatus::AC => SubmissionStatus::Accepted,
+            RunStatus::WA(_, _) => SubmissionStatus::WrongAnswer,
+            RunStatus::MLE => SubmissionStatus::MemoLimitExceeded,
+            RunStatus::TLE => SubmissionStatus::TimeLimitExceeded,
+            RunStatus::RE => SubmissionStatus::RuntimeError,
+            RunStatus::Unknown => SubmissionStatus::UnknownError,
+        },
         _ => SubmissionStatus::UnknownError,
     } as SubmissionStatusCode;
     let ret = SubmitRet {
-        status: ret_status,
-        info: format!("{:?}", exec_result),
+        status: answer,
+        info: format!("{:?}", answer),
     };
 
     fs::remove_file(source_path).unwrap();
