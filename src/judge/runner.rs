@@ -16,6 +16,8 @@ use crate::{
     },
 };
 
+use super::judge::JudgeStatus;
+
 #[derive(Debug, PartialEq, PartialOrd, Eq, Ord, Clone)]
 pub enum FileType {
     Stdout,
@@ -36,24 +38,14 @@ pub struct Runner {
     running_recipe: BTreeMap<String, Option<Vec<String>>>,
 }
 
-#[derive(Clone, Copy)]
-pub enum RunStatus {
-    AC,
-    WA(usize, usize),
-    TLE,
-    MLE,
-    RE,
-    Unknown,
-}
-
 pub struct Answer {
-    run_status: RunStatus,
+    run_status: JudgeStatus,
     time_elpased: u64,
     mem_used: u64,
 }
 
 impl Answer {
-    fn new(run_status: RunStatus, time_elpased: u64, mem_used: u64) -> Answer {
+    fn new(run_status: JudgeStatus, time_elpased: u64, mem_used: u64) -> Answer {
         Answer {
             run_status,
             time_elpased,
@@ -61,7 +53,11 @@ impl Answer {
         }
     }
 
-    pub fn get_run_status(&self) -> RunStatus {
+    pub fn get_run_status(&self) -> &JudgeStatus {
+        &self.run_status
+    }
+
+    pub fn get_run_status_owned(self) -> JudgeStatus {
         self.run_status
     }
 
@@ -242,9 +238,9 @@ impl Runner {
         // =====================================================================
 
         let run_state = if wrong_cnt == 0 {
-            RunStatus::AC
+            JudgeStatus::Accepted
         } else {
-            RunStatus::WA(testcases.len() - wrong_cnt, testcases.len())
+            JudgeStatus::WrongAnswer(testcases.len() - wrong_cnt, testcases.len())
         };
         // TODO
         let time_elpased = 1;

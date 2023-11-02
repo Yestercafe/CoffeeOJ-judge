@@ -5,12 +5,9 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 
 use crate::judge::{
-    file::{get_pairwise_testcase_files, TestcaseFile},
-    runner::{RunStatus, Runner},
+    judge::JudgeStatus, task::Task, compiler, runner, consts::LANG_EXTENSIONS,
 };
-use crate::server::models::{self, SubmissionStatus, CODE_EXT};
-
-static RUNNER: Lazy<Runner> = Lazy::new(|| Runner::new());
+use crate::server::models::{self, SubmissionStatus};
 
 type SubmissionStatusCode = i16;
 #[derive(Serialize, Deserialize)]
@@ -18,6 +15,11 @@ struct SubmitRet {
     status: SubmissionStatusCode,
     info: String,
 }
+
+use std::sync::Mutex;
+
+static SINGLETON_COMPILER: Lazy<Mutex<compiler::Compiler>> = Lazy::new(|| Mutex::new(compiler::Compiler::new()));
+static SINGLETON_RUNNER: Lazy<Mutex<runner::Runner>> = Lazy::new(|| Mutex::new(runner::Runner::new()));
 
 #[tracing::instrument(
     name = "Submit code",
@@ -28,47 +30,44 @@ struct SubmitRet {
     )
 )]
 pub async fn submit(form: web::Json<models::Submission>) -> HttpResponse {
-    // initialize static objects
-    Lazy::force(&crate::server::models::CODE_EXT);
-    Lazy::force(&RUNNER);
-
     // create the source code file
     let source = &form.source;
     let lang = &form.lang;
-    let ext = match CODE_EXT.get(lang.as_str()) {
-        Some(ext) => *ext,
+    let ext = match LANG_EXTENSIONS.get(lang.as_str()) {
+        Some(ext) => ext,
         None => return HttpResponse::BadRequest().finish(),
     };
     let source_path = format!("Main{}", ext);
     fs::write(source_path.as_str(), source.as_str()).unwrap();
 
-    // exec runner
-    let read_path = format!("assets/{}", form.problem_id);
-    let lst_read_dir = fs::read_dir(read_path.as_str());
-    let mut testcase_files: Vec<TestcaseFile> = vec![];
-    if let Ok(lst_read_dir) = lst_read_dir {
-        for dir in lst_read_dir {
-            let path = format!("{}", dir.unwrap().path().display());
-            let sp = path.split_at(read_path.len() + 1);
-            testcase_files.push(TestcaseFile::new(sp.1, &path));
-        }
-    }
-    let pairwise_testcase_files = get_pairwise_testcase_files(testcase_files);
-    let exec_result = RUNNER.execute(&source_path, lang, &pairwise_testcase_files);
+    let Ok(problem_id) = form.problem_id.parse::<u64>() else {
+        fs::remove_file(source_path).unwrap();
+        let body = SubmitRet {
+            status: SubmissionStatus::UnknownError as SubmissionStatusCode,
+            info: "Wrong problem id".to_string(),
+        };
+        return HttpResponse::Ok() .json(body);
+    };
+
+    let testcase_path = format!("assets/{problem_id}");
+
+    // exec task
+    let this_task = Task::new(problem_id, &testcase_path, lang, source);
+    let exec_result = this_task
+        .execute(&SINGLETON_COMPILER.lock().unwrap(), &SINGLETON_RUNNER.lock().unwrap());
     let answer = match exec_result {
-        Ok(a) => match a.get_run_status() {
-            RunStatus::AC => SubmissionStatus::Accepted,
-            RunStatus::WA(_, _) => SubmissionStatus::WrongAnswer,
-            RunStatus::MLE => SubmissionStatus::MemoLimitExceeded,
-            RunStatus::TLE => SubmissionStatus::TimeLimitExceeded,
-            RunStatus::RE => SubmissionStatus::RuntimeError,
-            RunStatus::Unknown => SubmissionStatus::UnknownError,
-        },
+        JudgeStatus::Accepted => SubmissionStatus::Accepted,
+        JudgeStatus::CompilationError(_) => SubmissionStatus::CompilationError,
+        JudgeStatus::WrongAnswer(_, _) => SubmissionStatus::WrongAnswer,
+        JudgeStatus::MemoLimitExceeded(_) => SubmissionStatus::MemoLimitExceeded,
+        JudgeStatus::TimeLimitExceeded(_) => SubmissionStatus::TimeLimitExceeded,
+        JudgeStatus::RuntimeError(_) => SubmissionStatus::RuntimeError,
+        JudgeStatus::UnknownError(_) => SubmissionStatus::UnknownError,
         _ => SubmissionStatus::UnknownError,
     } as SubmissionStatusCode;
     let ret = SubmitRet {
         status: answer,
-        info: format!("{:?}", answer),
+        info: format!("{:?}", exec_result),
     };
 
     fs::remove_file(source_path).unwrap();

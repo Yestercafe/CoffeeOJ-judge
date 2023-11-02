@@ -2,15 +2,17 @@ use std::{fmt::Debug, fs};
 
 use crate::judge::file::TestcaseFile;
 
-use super::runner;
-
-#[derive(Debug, PartialEq, PartialOrd, Eq, Ord, Clone)]
-pub enum JudgeErr {
-    // WrongAnswer(#passed testcases, #testcases)
+#[derive(Debug)]
+pub enum JudgeStatus {
+    Halt,
+    Pending,
+    Accepted,
     WrongAnswer(usize, usize),
-    RuntimeError(String),
     CompilationError(String),
-    InternalError(runner::Error),
+    RuntimeError(String),
+    TimeLimitExceeded(u64),
+    MemoLimitExceeded(u64),
+    UnknownError(String),
 }
 
 pub struct Differ {

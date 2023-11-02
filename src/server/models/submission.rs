@@ -1,16 +1,4 @@
-use std::collections::BTreeMap;
-
-use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
-
-pub static CODE_EXT: Lazy<BTreeMap<&'static str, &'static str>> = Lazy::new(|| {
-    BTreeMap::from([
-        ("c", ".c"),
-        ("cpp", ".cpp"),
-        ("rust", ".rs"),
-        ("python", ".py"),
-    ])
-});
 
 #[derive(Clone, Copy)]
 pub enum SubmissionStatus {

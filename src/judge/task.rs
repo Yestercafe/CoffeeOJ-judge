@@ -3,7 +3,7 @@ use std::fs;
 use super::{
     compiler,
     file::{self, get_pairwise_testcase_files, TestcaseFile},
-    judge::JudgeErr,
+    judge::JudgeStatus,
     runner,
 };
 
@@ -25,29 +25,27 @@ impl Task {
         }
     }
 
-    pub fn execute(
-        self,
-        compiler: &compiler::Compiler,
-        runner: &runner::Runner,
-    ) -> Result<(), JudgeErr> {
+    pub fn execute(self, compiler: &compiler::Compiler, runner: &runner::Runner) -> JudgeStatus {
         // 1. save source code to file
-        let save_ret = file::save_source_code(&self.source_code, &self.lang).map_err(|_| {
-            // TODO
-            // update database: FileSystemError
-            JudgeErr::WrongAnswer(1, 2)
-        })?;
+        let save_ret = match file::save_source_code(&self.source_code, &self.lang) {
+            Ok(s) => s,
+            Err(e) => return JudgeStatus::UnknownError(format!("{:?}", e)),
+        };
 
         // 2. compile
-        let executable_path = compiler
-            .compile(&save_ret, &self.lang)
-            .map_err(|e| match e {
-                compiler::Error::CompilationError(msg) => JudgeErr::CompilationError(msg),
-                compiler::Error::LanguageNotFoundError
-                | compiler::Error::ForkFailed
-                | compiler::Error::NoCompilationLogError => {
-                    JudgeErr::CompilationError(format!("{:?}", e))
+        let executable_path = match compiler.compile(&save_ret, &self.lang) {
+            Ok(s) => s,
+            Err(e) => {
+                return match e {
+                    compiler::Error::CompilationError(msg) => JudgeStatus::CompilationError(msg),
+                    compiler::Error::LanguageNotFoundError
+                    | compiler::Error::ForkFailed
+                    | compiler::Error::NoCompilationLogError => {
+                        JudgeStatus::CompilationError(format!("{:?}", e))
+                    }
                 }
-            })?;
+            }
+        };
 
         // 3. run (runner.execute)
         let lst_read_dir = fs::read_dir(&self.testcases_path);
@@ -61,30 +59,16 @@ impl Task {
         }
         let testcases = get_pairwise_testcase_files(testcase_files);
 
-        let answer = runner
-            .execute(&executable_path, &self.lang, &testcases)
-            .map_err(|e| JudgeErr::InternalError(e))?;
-
-        // 4. remove compilation intermediate files (runner.clean)
-
-        let ret: Result<(), JudgeErr> = if let runner::RunStatus::AC = answer.get_run_status() {
-            Ok(())
-        } else {
-            Err(match answer.get_run_status() {
-                runner::RunStatus::WA(x, y) => JudgeErr::WrongAnswer(x, y),
-                runner::RunStatus::TLE => todo!(),
-                runner::RunStatus::MLE => todo!(),
-                runner::RunStatus::RE => todo!(),
-                runner::RunStatus::Unknown => todo!(),
-                runner::RunStatus::AC => unreachable!(),
-            })
+        let answer = match runner.execute(&executable_path, &self.lang, &testcases) {
+            Ok(a) => a,
+            Err(e) => return JudgeStatus::RuntimeError(format!("{:?}", e)),
         };
 
-        // JudgeErr should store time used and mem used
+        // 4. remove compilation intermediate files (runner.clean)
 
         // TODO defer.1. update database (db.update(id, xxx))
         // do defer in thread pool
 
-        return ret;
+        return answer.get_run_status_owned();
     }
 }
