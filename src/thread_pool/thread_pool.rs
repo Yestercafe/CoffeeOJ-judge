@@ -52,8 +52,8 @@ pub struct SharedData {
     pub panic_thread_count: AtomicUsize,
     pub queued_job_count: AtomicUsize,
 
-    pub should_stop: AtomicBool,
-    pub should_start: AtomicBool,
+    pub is_all_done: AtomicBool,
+    pub is_all_active: AtomicBool,
 }
 
 impl SharedData {
@@ -87,8 +87,8 @@ impl ThreadPool {
             active_thread_count: AtomicUsize::new(0),
             panic_thread_count: AtomicUsize::new(0),
             queued_job_count: AtomicUsize::new(0),
-            should_stop: AtomicBool::new(false),
-            should_start: AtomicBool::new(false),
+            is_all_done: AtomicBool::new(false),
+            is_all_active: AtomicBool::new(false),
         });
 
         ThreadPool {
@@ -117,8 +117,12 @@ impl ThreadPool {
         self.shared_data.is_idle()
     }
 
-    pub fn start_all(&self) {
-        self.shared_data.should_start.store(true, Ordering::SeqCst);
+    pub fn awake_all(&self) {
+        self.shared_data.is_all_active.store(true, Ordering::SeqCst);
+    }
+
+    pub fn block_all(&self) {
+        self.shared_data.is_all_active.store(false, Ordering::SeqCst);
     }
 
     pub fn stop_all(&self, unconditional: bool) {
@@ -126,7 +130,7 @@ impl ThreadPool {
             let lock = self.shared_data.job_receiver.lock().unwrap();
             while let Ok(_) = lock.recv() {}
         }
-        self.shared_data.should_stop.store(true, Ordering::SeqCst);
+        self.shared_data.is_all_done.store(true, Ordering::SeqCst);
     }
 
     pub fn join(&self) {
@@ -166,10 +170,10 @@ impl ThreadPool {
             let setinel = Sentinel::new(id, &shared_data);
 
             loop {
-                if shared_data.should_stop.load(Ordering::SeqCst) {
+                if shared_data.is_all_done.load(Ordering::SeqCst) {
                     break
                 }
-                if !shared_data.should_start.load(Ordering::SeqCst) {
+                if !shared_data.is_all_active.load(Ordering::SeqCst) {
                     continue
                 }
 

@@ -36,7 +36,7 @@ fn manual_main_test() {
     assert_eq!(thread_pool.active_thread_count(), 0);
     assert_eq!(thread_pool.queued_job_count(), 2);
 
-    thread_pool.start_all();
+    thread_pool.awake_all();
     thread_pool.join();
 
     assert_eq!(thread_pool.queued_job_count(), 0);

@@ -9,7 +9,7 @@ mod test {
             let task = Task::new(1, "assets/1", "cpp", "#include <iostream>\nint main() { int a; std::cin >> a; std::cout << 2 * a; }");
             thread_pool.send_task(task);
         }
-        thread_pool.start_all();
+        thread_pool.awake_all();
         thread_pool.join();
 
         assert_eq!(thread_pool.active_thread_count(), 0);
@@ -30,7 +30,7 @@ mod test {
             }
         }
 
-        thread_pool.start_all();
+        thread_pool.awake_all();
         thread_pool.join();
 
         assert_eq!(thread_pool.active_thread_count(), 0);
