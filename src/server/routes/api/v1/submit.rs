@@ -5,9 +5,7 @@ use actix_web::{web, HttpResponse};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 
-use crate::judge::{
-    judge::JudgeStatus, task::Task, compiler, runner, consts::LANG_EXTENSIONS,
-};
+use crate::judge::{compiler, consts::LANG_EXTENSIONS, judge::JudgeStatus, runner, task::Task};
 use crate::server::models::{self, SubmissionStatus};
 
 type SubmissionStatusCode = i16;
@@ -17,7 +15,8 @@ struct SubmitRet {
     info: String,
 }
 
-static SINGLETON_COMPILER: Lazy<Arc<compiler::Compiler>> = Lazy::new(|| Arc::new(compiler::Compiler::new()));
+static SINGLETON_COMPILER: Lazy<Arc<compiler::Compiler>> =
+    Lazy::new(|| Arc::new(compiler::Compiler::new()));
 static SINGLETON_RUNNER: Lazy<Arc<runner::Runner>> = Lazy::new(|| Arc::new(runner::Runner::new()));
 
 #[tracing::instrument(
@@ -52,8 +51,7 @@ pub async fn submit(form: web::Json<models::Submission>) -> HttpResponse {
 
     // exec task
     let this_task = Task::new(problem_id, &testcase_path, lang, source);
-    let exec_result = this_task
-        .execute(SINGLETON_COMPILER.clone(), SINGLETON_RUNNER.clone());
+    let exec_result = this_task.execute(SINGLETON_COMPILER.clone(), SINGLETON_RUNNER.clone());
     let answer = match exec_result {
         JudgeStatus::Accepted => SubmissionStatus::Accepted,
         JudgeStatus::CompilationError(_) => SubmissionStatus::CompilationError,

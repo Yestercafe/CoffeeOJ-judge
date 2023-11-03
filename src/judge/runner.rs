@@ -197,9 +197,10 @@ impl Runner {
                 }
                 Ok(ForkResult::Child) => {
                     let input_path = c_string!(input_testcase.get_path());
-                    let output_path = c_string!(format!("{}.stdout", input_testcase.get_path()).as_str());
+                    let output_path =
+                        c_string!(format!("{}.stdout", input_testcase.get_path()).as_str());
                     let errout_path = c_string!(errout_path.as_str());
-                    
+
                     unsafe {
                         let stdin = libc::fdopen(libc::STDIN_FILENO, r_mode.as_ptr());
                         libc::freopen(input_path.as_ptr(), r_mode.as_ptr(), stdin);
@@ -229,7 +230,8 @@ impl Runner {
             }
 
             // TODO clean stdout and stderr
-            let err_content = fs::read_to_string(errout_path).map_err(|_| Error::FileSystemError)?;
+            let err_content =
+                fs::read_to_string(errout_path).map_err(|_| Error::FileSystemError)?;
             if !err_content.is_empty() {
                 return Ok(Answer::new(JudgeStatus::RuntimeError(err_content), 0, 0));
             }

@@ -1,12 +1,20 @@
 #[cfg(test)]
 mod test {
-    use crate::{judge::{task::Task, judge::JudgeStatus}, thread_pool::thread_pool_builder::ThreadPoolBuilder};
+    use crate::{
+        judge::{judge::JudgeStatus, task::Task},
+        thread_pool::thread_pool_builder::ThreadPoolBuilder,
+    };
 
     #[test]
     fn thread_pool_join() {
         let thread_pool = ThreadPoolBuilder::new().build();
         for _ in 0..20 {
-            let task = Task::new(1, "assets/1", "cpp", "#include <iostream>\nint main() { int a; std::cin >> a; std::cout << 2 * a; }");
+            let task = Task::new(
+                1,
+                "assets/1",
+                "cpp",
+                "#include <iostream>\nint main() { int a; std::cin >> a; std::cout << 2 * a; }",
+            );
             thread_pool.send_task(task);
         }
         thread_pool.awake_all();
@@ -21,11 +29,14 @@ mod test {
         let thread_pool = ThreadPoolBuilder::new().build();
         for i in 0..20 {
             if i % 4 == 0 {
-                thread_pool.send_job(|| -> JudgeStatus {
-                    panic!()
-                })
+                thread_pool.send_job(|| -> JudgeStatus { panic!() })
             } else {
-                let task = Task::new(1, "assets/1", "cpp", "#include <iostream>\nint main() { int a; std::cin >> a; std::cout << 2 * a; }");
+                let task = Task::new(
+                    1,
+                    "assets/1",
+                    "cpp",
+                    "#include <iostream>\nint main() { int a; std::cin >> a; std::cout << 2 * a; }",
+                );
                 thread_pool.send_task(task);
             }
         }
