@@ -2,6 +2,8 @@ use std::{collections::BTreeMap, fmt::Debug, fs::File, io::Write};
 
 use super::consts::{LANG_EXTENSIONS, SOURCE_CODE_SAVED_PATH};
 
+use random_number::{self, random};
+
 #[derive(Clone)]
 pub struct TestcaseFile {
     filename: String,
@@ -124,7 +126,7 @@ pub fn save_source_code(source_code: &str, lang: &str) -> Result<SavedSource, St
     };
 
     // TODO get auto-increased id from SQL
-    let submission_id: u64 = 1234;
+    let submission_id: u64 = random!(0..1000000u64);
 
     let filename = format!("{submission_id}.{ext}");
     let full_path = format!("{}/{filename}", SOURCE_CODE_SAVED_PATH);
