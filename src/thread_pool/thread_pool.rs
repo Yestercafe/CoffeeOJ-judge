@@ -1,4 +1,4 @@
-use std::{sync::{Arc, mpsc::{Sender, channel, Receiver}, Mutex, atomic::{AtomicUsize, Ordering, AtomicBool}, Condvar}, thread};
+use std::{sync::{Arc, mpsc::{Sender, channel, Receiver}, Mutex, atomic::{AtomicUsize, Ordering, AtomicBool}, Condvar}, thread, fmt::Debug};
 
 use crate::judge::{task::Task, compiler, runner, judge::JudgeStatus};
 
@@ -32,20 +32,40 @@ impl<'a> Drop for Sentinel<'a> {
                 self.shared_data.panic_thread_count.fetch_add(1, Ordering::SeqCst);
             }
             ThreadPool::spawn_thread(self.id, self.shared_data.clone());
+            self.shared_data.notify_when_idle();
         }
     }
 }
 
 pub struct SharedData {
     pub job_receiver: Mutex<Receiver<Thunk<'static>>>,
+
     pub global_compiler: Arc<compiler::Compiler>,
     pub global_runner: Arc<runner::Runner>,
+
+    pub empty_trigger: Mutex<()>,
+    pub empty_condvar: Condvar,
+    pub join_times: AtomicUsize,
+
     pub max_thread_count: AtomicUsize,
     pub active_thread_count: AtomicUsize,
     pub panic_thread_count: AtomicUsize,
     pub queued_job_count: AtomicUsize,
+
     pub should_stop: AtomicBool,
     pub should_start: AtomicBool,
+}
+
+impl SharedData {
+    fn is_idle(&self) -> bool {
+        self.queued_job_count.load(Ordering::SeqCst) == 0 && self.active_thread_count.load(Ordering::SeqCst) == 0
+    }
+
+    fn notify_when_idle(&self) {
+        if self.is_idle() {
+            self.empty_condvar.notify_all();
+        }
+    }
 }
 
 pub struct ThreadPool {
@@ -60,6 +80,9 @@ impl ThreadPool {
             job_receiver: Mutex::new(receiver),
             global_compiler: Arc::new(compiler::Compiler::new()),
             global_runner: Arc::new(runner::Runner::new()),
+            empty_trigger: Mutex::new(()),
+            empty_condvar: Condvar::new(),
+            join_times: AtomicUsize::new(0),
             max_thread_count: AtomicUsize::new(size),
             active_thread_count: AtomicUsize::new(0),
             panic_thread_count: AtomicUsize::new(0),
@@ -90,6 +113,10 @@ impl ThreadPool {
         self.shared_data.queued_job_count.load(Ordering::SeqCst)
     }
 
+    pub fn is_idle(&self) -> bool {
+        self.shared_data.is_idle()
+    }
+
     pub fn start_all(&self) {
         self.shared_data.should_start.store(true, Ordering::SeqCst);
     }
@@ -102,7 +129,22 @@ impl ThreadPool {
         self.shared_data.should_stop.store(true, Ordering::SeqCst);
     }
 
-    fn send_job<F>(&self, job: F)
+    pub fn join(&self) {
+        if self.is_idle() {
+            return;
+        }
+
+        let join_times = self.shared_data.join_times.load(Ordering::SeqCst);
+        let mut trigger = self.shared_data.empty_trigger.lock().unwrap();
+
+        while join_times == self.shared_data.join_times.load(Ordering::SeqCst) && !self.is_idle() {
+            trigger = self.shared_data.empty_condvar.wait(trigger).unwrap();
+        }
+
+        let _ = self.shared_data.join_times.compare_exchange(join_times, join_times + 1, Ordering::SeqCst, Ordering::SeqCst);
+    }
+
+    pub fn send_job<F>(&self, job: F)
     where
         F: FnOnce() -> JudgeStatus + Send + 'static
     {
@@ -148,9 +190,22 @@ impl ThreadPool {
                 println!("Worker #{id}: {:?}", judge_status);
 
                 shared_data.active_thread_count.fetch_sub(1, Ordering::SeqCst);
+
+                shared_data.notify_when_idle();
             }
 
             setinel.cancel();
         }).unwrap();
+    }
+}
+
+impl Debug for ThreadPool {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("ThreadPool")
+            .field("max_thread_count", &self.max_thread_count())
+            .field("active_thread_count", &self.active_thread_count())
+            .field("panic_thread_count", &self.panic_thread_count())
+            .field("queued_job_count", &self.queued_job_count())
+            .finish()
     }
 }
