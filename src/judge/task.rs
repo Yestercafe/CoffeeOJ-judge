@@ -1,4 +1,4 @@
-use std::fs;
+use std::{fs, sync::Arc};
 
 use super::{
     compiler,
@@ -25,7 +25,7 @@ impl Task {
         }
     }
 
-    pub fn execute(self, compiler: &compiler::Compiler, runner: &runner::Runner) -> JudgeStatus {
+    pub fn execute(self, compiler: Arc<compiler::Compiler>, runner: Arc<runner::Runner>) -> JudgeStatus {
         // 1. save source code to file
         let save_ret = match file::save_source_code(&self.source_code, &self.lang) {
             Ok(s) => s,

@@ -1,4 +1,5 @@
 use std::fs;
+use std::sync::Arc;
 
 use actix_web::{web, HttpResponse};
 use once_cell::sync::Lazy;
@@ -16,10 +17,8 @@ struct SubmitRet {
     info: String,
 }
 
-use std::sync::Mutex;
-
-static SINGLETON_COMPILER: Lazy<Mutex<compiler::Compiler>> = Lazy::new(|| Mutex::new(compiler::Compiler::new()));
-static SINGLETON_RUNNER: Lazy<Mutex<runner::Runner>> = Lazy::new(|| Mutex::new(runner::Runner::new()));
+static SINGLETON_COMPILER: Lazy<Arc<compiler::Compiler>> = Lazy::new(|| Arc::new(compiler::Compiler::new()));
+static SINGLETON_RUNNER: Lazy<Arc<runner::Runner>> = Lazy::new(|| Arc::new(runner::Runner::new()));
 
 #[tracing::instrument(
     name = "Submit code",
@@ -54,7 +53,7 @@ pub async fn submit(form: web::Json<models::Submission>) -> HttpResponse {
     // exec task
     let this_task = Task::new(problem_id, &testcase_path, lang, source);
     let exec_result = this_task
-        .execute(&SINGLETON_COMPILER.lock().unwrap(), &SINGLETON_RUNNER.lock().unwrap());
+        .execute(SINGLETON_COMPILER.clone(), SINGLETON_RUNNER.clone());
     let answer = match exec_result {
         JudgeStatus::Accepted => SubmissionStatus::Accepted,
         JudgeStatus::CompilationError(_) => SubmissionStatus::CompilationError,

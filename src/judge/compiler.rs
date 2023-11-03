@@ -1,6 +1,6 @@
 #![allow(clippy::missing_safety_doc)]
 
-use std::{collections::HashMap, ffi::CString, fmt::Debug, fs};
+use std::{collections::HashMap, ffi::CString, fmt::Debug, fs, sync::Mutex};
 
 use nix::{
     libc,
@@ -22,7 +22,7 @@ pub enum Error {
 }
 
 pub struct Compiler {
-    pub compiling_recipe: HashMap<String, Option<Vec<String>>>,
+    pub compiling_recipe: Mutex<HashMap<String, Option<Vec<String>>>>,
 }
 
 impl Compiler {
@@ -81,7 +81,7 @@ impl Compiler {
         }
 
         Compiler {
-            compiling_recipe: recipe,
+            compiling_recipe: Mutex::new(recipe),
         }
     }
 
@@ -90,7 +90,8 @@ impl Compiler {
         source: &SavedSource,
         lang: &str,
     ) -> Result<Option<(String, Vec<CString>)>, Error> {
-        let command_chain = match self.compiling_recipe.get(lang) {
+        let compiling_recipe = self.compiling_recipe.lock().unwrap();
+        let command_chain = match compiling_recipe.get(lang) {
             Some(chain) => chain,
             _ => return Err(Error::LanguageNotFoundError),
         };

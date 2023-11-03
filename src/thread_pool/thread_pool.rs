@@ -38,8 +38,8 @@ impl<'a> Drop for Sentinel<'a> {
 
 pub struct SharedData {
     pub job_receiver: Mutex<Receiver<Thunk<'static>>>,
-    pub global_compiler: Mutex<compiler::Compiler>,
-    pub global_runner: Mutex<runner::Runner>,
+    pub global_compiler: Arc<compiler::Compiler>,
+    pub global_runner: Arc<runner::Runner>,
     pub max_thread_count: AtomicUsize,
     pub active_thread_count: AtomicUsize,
     pub panic_thread_count: AtomicUsize,
@@ -58,8 +58,8 @@ impl ThreadPool {
         let (sender, receiver) = channel::<Thunk<'static>>();
         let shared_data = Arc::new(SharedData {
             job_receiver: Mutex::new(receiver),
-            global_compiler: Mutex::new(compiler::Compiler::new()),
-            global_runner: Mutex::new(runner::Runner::new()),
+            global_compiler: Arc::new(compiler::Compiler::new()),
+            global_runner: Arc::new(runner::Runner::new()),
             max_thread_count: AtomicUsize::new(size),
             active_thread_count: AtomicUsize::new(0),
             panic_thread_count: AtomicUsize::new(0),
@@ -113,9 +113,7 @@ impl ThreadPool {
     pub fn send_task(&self, task: Task) {
         let shared_data = self.shared_data.clone();
         self.send_job(move || {
-            let compiler = shared_data.global_compiler.lock().unwrap();
-            let runner = shared_data.global_runner.lock().unwrap();
-            task.execute(&compiler, &runner)
+            task.execute(shared_data.global_compiler.clone(), shared_data.global_runner.clone())
         });
     }
 

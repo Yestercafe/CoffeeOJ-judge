@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, ffi::CString, fs};
+use std::{collections::BTreeMap, ffi::CString, fs, sync::Mutex};
 
 use nix::{
     libc,
@@ -35,7 +35,7 @@ pub enum Error {
 }
 
 pub struct Runner {
-    running_recipe: BTreeMap<String, Option<Vec<String>>>,
+    running_recipe: Mutex<BTreeMap<String, Option<Vec<String>>>>,
 }
 
 pub struct Answer {
@@ -129,7 +129,7 @@ impl Runner {
         dbg!(&recipe);
 
         Runner {
-            running_recipe: recipe,
+            running_recipe: Mutex::new(recipe),
         }
     }
 
@@ -138,7 +138,8 @@ impl Runner {
         executable_path: &str,
         lang: &str,
     ) -> Result<Vec<CString>, Error> {
-        let command_chain = match self.running_recipe.get(lang) {
+        let running_recipe = self.running_recipe.lock().unwrap();
+        let command_chain = match running_recipe.get(lang) {
             Some(chain) => match chain {
                 Some(chain) => chain,
                 _ => return Err(Error::LanguageNotFoundError),
