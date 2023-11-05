@@ -1,6 +1,5 @@
-use coffee_oj_judge::judge::{self, compiler, runner, task};
+use coffee_oj_judge::judge;
 use coffee_oj_judge::server::{startup::WebApp, utils};
-use coffee_oj_judge::thread_pool::thread_pool_builder::ThreadPoolBuilder;
 use once_cell::sync::Lazy;
 
 fn init_lazy() {
@@ -16,28 +15,35 @@ async fn main() -> Result<(), std::io::Error> {
     Ok(())
 }
 
+#[cfg(test)]
+mod tests {
+    use coffee_oj_judge::{thread_pool::thread_pool_builder::ThreadPoolBuilder, judge::task};
+
+    use crate::init_lazy;
+
 #[test]
-fn manual_main_test() {
-    init_lazy();
+    fn manual_main_test() {
+        init_lazy();
 
-    let thread_pool = ThreadPoolBuilder::new().build();
+        let thread_pool = ThreadPoolBuilder::new().build();
 
-    let a_task = task::Task::new(
-        1,
-        "assets/1",
-        "cpp",
-        "#include <iostream>\nint main() { int a; std::cin >> a; std::cout << a * 2; return 0; }",
-    );
-    thread_pool.send_task(a_task);
+        let a_task = task::Task::new(
+            1,
+            "assets/1",
+            "cpp",
+            "#include <iostream>\nint main() { int a; std::cin >> a; std::cout << a * 2; return 0; }",
+        );
+        thread_pool.send_task(a_task);
 
-    let a_task = task::Task::new(1, "assets/1", "python", "print(2 * int(input()))");
-    thread_pool.send_task(a_task);
+        let a_task = task::Task::new(1, "assets/1", "python", "print(2 * int(input()))");
+        thread_pool.send_task(a_task);
 
-    assert_eq!(thread_pool.active_thread_count(), 0);
-    assert_eq!(thread_pool.queued_job_count(), 2);
+        assert_eq!(thread_pool.active_thread_count(), 0);
+        assert_eq!(thread_pool.queued_job_count(), 2);
 
-    thread_pool.awake_all();
-    thread_pool.join();
+        thread_pool.awake_all();
+        thread_pool.join();
 
-    assert_eq!(thread_pool.queued_job_count(), 0);
+        assert_eq!(thread_pool.queued_job_count(), 0);
+    }
 }

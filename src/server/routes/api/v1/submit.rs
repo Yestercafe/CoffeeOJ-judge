@@ -16,8 +16,8 @@ struct SubmitRet {
 }
 
 static SINGLETON_COMPILER: Lazy<Arc<compiler::Compiler>> =
-    Lazy::new(|| Arc::new(compiler::Compiler::new()));
-static SINGLETON_RUNNER: Lazy<Arc<runner::Runner>> = Lazy::new(|| Arc::new(runner::Runner::new()));
+    Lazy::new(|| Arc::new(compiler::Compiler::default()));
+static SINGLETON_RUNNER: Lazy<Arc<runner::Runner>> = Lazy::new(|| Arc::new(runner::Runner::default()));
 
 #[tracing::instrument(
     name = "Submit code",

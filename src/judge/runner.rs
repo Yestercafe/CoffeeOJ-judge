@@ -70,11 +70,11 @@ impl Answer {
     }
 }
 
-impl Runner {
-    pub fn new() -> Runner {
+impl Default for Runner {
+    fn default() -> Runner {
         let mut recipe: BTreeMap<String, Option<Vec<String>>> = BTreeMap::new();
 
-        let config_text = match fs::read_to_string(&CONFIG_PATH) {
+        let config_text = match fs::read_to_string(CONFIG_PATH) {
             Ok(s) => s,
             Err(e) => panic!("config: `{CONFIG_PATH}` is missing: {e}"),
         };
@@ -132,7 +132,9 @@ impl Runner {
             running_recipe: Mutex::new(recipe),
         }
     }
+}
 
+impl Runner {
     fn generate_execution_command(
         &self,
         executable_path: &str,
@@ -140,17 +142,14 @@ impl Runner {
     ) -> Result<Vec<CString>, Error> {
         let running_recipe = self.running_recipe.lock().unwrap();
         let command_chain = match running_recipe.get(lang) {
-            Some(chain) => match chain {
-                Some(chain) => chain,
-                _ => return Err(Error::LanguageNotFoundError),
-            },
+            Some(Some(chain)) => chain,
             _ => return Err(Error::LanguageNotFoundError),
         };
 
         let mut command = Vec::<CString>::new();
         for token in command_chain {
             let mut token: &str = token;
-            if token.starts_with("$") {
+            if token.starts_with('$') {
                 let (_, var) = token.split_at(1);
                 match var {
                     "target" | "source" => token = executable_path, // FIXME tricky opt for interpreted languages, should write a better parser instead

@@ -1,12 +1,13 @@
 use super::ThreadPool;
 
+#[derive(Default)]
 pub struct ThreadPoolBuilder {
     pool_size: Option<usize>,
 }
 
 impl ThreadPoolBuilder {
     pub fn new() -> ThreadPoolBuilder {
-        ThreadPoolBuilder { pool_size: None }
+        ThreadPoolBuilder::default()
     }
 
     pub fn set_pool_size(mut self, size: usize) -> ThreadPoolBuilder {

@@ -25,10 +25,10 @@ pub struct Compiler {
     pub compiling_recipe: Mutex<HashMap<String, Option<Vec<String>>>>,
 }
 
-impl Compiler {
-    pub fn new() -> Compiler {
+impl Default for Compiler {
+    fn default() -> Compiler {
         let mut recipe: HashMap<String, Option<Vec<String>>> = HashMap::new();
-        let config_text = match fs::read_to_string(&CONFIG_PATH) {
+        let config_text = match fs::read_to_string(CONFIG_PATH) {
             Ok(s) => s,
             Err(e) => panic!("config: `{CONFIG_PATH}` is missing: {e}"),
         };
@@ -85,6 +85,9 @@ impl Compiler {
         }
     }
 
+}
+
+impl Compiler {
     fn generate_compilation_command(
         &self,
         source: &SavedSource,
@@ -105,7 +108,7 @@ impl Compiler {
         let mut command = Vec::<CString>::new();
         for token in command_chain {
             let mut token: &str = token;
-            if token.starts_with("$") {
+            if token.starts_with('$') {
                 let (_, var) = token.split_at(1);
                 match var {
                     "source" => token = source.get_full_path(),
@@ -121,7 +124,7 @@ impl Compiler {
 
     pub fn compile(&self, source: &SavedSource, lang: &str) -> Result<String, Error> {
         let ret = self.generate_compilation_command(source, lang)?;
-        if let None = ret {
+        if ret.is_none() {
             return Ok(source.get_full_path().to_string());
         }
         let (target_full_path, command) = ret.unwrap();

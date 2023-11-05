@@ -73,6 +73,6 @@ impl Task {
         // TODO defer.1. update database (db.update(id, xxx))
         // do defer in thread pool
 
-        return answer.get_run_status_owned();
+        answer.get_run_status_owned()
     }
 }
