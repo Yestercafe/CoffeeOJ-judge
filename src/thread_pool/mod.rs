@@ -11,9 +11,13 @@ use std::{
     thread,
 };
 
-use crate::judge::{compiler, judge::JudgeStatus, runner, task::Task};
+use crate::judge::{
+    compiler,
+    runner::{self, RunnerJob},
+    task::Task,
+};
 
-type Thunk<'a> = Box<dyn FnOnce() -> JudgeStatus + Send + 'a>;
+type Thunk<'a> = Box<dyn FnOnce() -> Vec<RunnerJob> + Send + 'a>;
 
 struct Sentinel<'a> {
     id: usize,
@@ -53,6 +57,7 @@ impl<'a> Drop for Sentinel<'a> {
 }
 
 pub struct SharedData {
+    pub job_sender: Arc<Sender<Thunk<'static>>>,
     pub job_receiver: Mutex<Receiver<Thunk<'static>>>,
 
     pub global_compiler: Arc<compiler::Compiler>,
@@ -85,14 +90,16 @@ impl SharedData {
 }
 
 pub struct ThreadPool {
-    pub jobs_sender: Sender<Thunk<'static>>,
+    pub job_sender: Arc<Sender<Thunk<'static>>>,
     pub shared_data: Arc<SharedData>,
 }
 
 impl ThreadPool {
     pub fn new(size: usize) -> ThreadPool {
         let (sender, receiver) = channel::<Thunk<'static>>();
+        let sender = Arc::new(sender);
         let shared_data = Arc::new(SharedData {
+            job_sender: sender.clone(),
             job_receiver: Mutex::new(receiver),
             global_compiler: Arc::new(compiler::Compiler::default()),
             global_runner: Arc::new(runner::Runner::default()),
@@ -108,7 +115,7 @@ impl ThreadPool {
         });
 
         ThreadPool {
-            jobs_sender: sender,
+            job_sender: sender,
             shared_data,
         }
     }
@@ -173,21 +180,28 @@ impl ThreadPool {
 
     pub fn send_job<F>(&self, job: F)
     where
-        F: FnOnce() -> JudgeStatus + Send + 'static,
+        F: FnOnce() -> Vec<RunnerJob> + Send + 'static,
     {
         self.shared_data
             .queued_job_count
             .fetch_add(1, Ordering::SeqCst);
-        self.jobs_sender.send(Box::new(job)).unwrap();
+        self.job_sender.send(Box::new(job)).unwrap();
     }
 
     pub fn send_task(&self, task: Task) {
         let shared_data = self.shared_data.clone();
         self.send_job(move || {
-            task.execute(
+            let result = task.execute(
                 shared_data.global_compiler.clone(),
                 shared_data.global_runner.clone(),
-            )
+            );
+
+            if let Ok(runner_jobs) = result {
+                runner_jobs
+            } else {
+                println!("{:?}", result.unwrap_err());
+                vec![]
+            }
         });
     }
 
@@ -224,8 +238,12 @@ impl ThreadPool {
                         .fetch_add(1, Ordering::SeqCst);
                     shared_data.queued_job_count.fetch_sub(1, Ordering::SeqCst);
 
-                    let judge_status = job();
-                    println!("Worker #{id}: {:?}", judge_status);
+                    let runner_jobs: Vec<RunnerJob> = job();
+                    println!("Worker #{id}: {:#?}", runner_jobs);
+                    for job in runner_jobs {
+                        shared_data.queued_job_count.fetch_add(1, Ordering::SeqCst);
+                        shared_data.job_sender.send(Box::new(|| { job.execute_once().unwrap(); vec![] })).unwrap();
+                    }
 
                     shared_data
                         .active_thread_count

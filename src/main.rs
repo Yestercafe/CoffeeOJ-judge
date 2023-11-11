@@ -17,11 +17,11 @@ async fn main() -> Result<(), std::io::Error> {
 
 #[cfg(test)]
 mod tests {
-    use coffee_oj_judge::{thread_pool::thread_pool_builder::ThreadPoolBuilder, judge::task};
+    use coffee_oj_judge::{judge::task, thread_pool::thread_pool_builder::ThreadPoolBuilder};
 
     use crate::init_lazy;
 
-#[test]
+    #[test]
     fn manual_main_test() {
         init_lazy();
 

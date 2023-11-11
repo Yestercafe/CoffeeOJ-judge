@@ -1,8 +1,19 @@
 use std::{collections::BTreeMap, fmt::Debug, fs::File, io::Write};
 
-use super::consts::{LANG_EXTENSIONS, SOURCE_CODE_SAVED_PATH};
+use super::{consts::{LANG_EXTENSIONS, SOURCE_CODE_SAVED_PATH}, JudgeStatus};
 
 use random_number::{self, random};
+
+// TODO binds an Arc of Task
+#[derive(Default)]
+pub struct DiffTask {}
+
+impl DiffTask {
+    pub fn do_diff(self) -> JudgeStatus {
+        // TODO
+        JudgeStatus::Halt
+    }
+}
 
 #[derive(Clone)]
 pub struct TestcaseFile {
@@ -41,6 +52,7 @@ impl Debug for TestcaseFile {
     }
 }
 
+#[derive(Clone)]
 pub struct Testcase {
     pub input_file: TestcaseFile,
     pub output_file: TestcaseFile,

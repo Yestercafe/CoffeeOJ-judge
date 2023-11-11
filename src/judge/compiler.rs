@@ -84,7 +84,6 @@ impl Default for Compiler {
             compiling_recipe: Mutex::new(recipe),
         }
     }
-
 }
 
 impl Compiler {

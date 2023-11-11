@@ -5,7 +5,7 @@ use actix_web::{web, HttpResponse};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 
-use crate::judge::{compiler, consts::LANG_EXTENSIONS, judge::JudgeStatus, runner, task::Task};
+use crate::judge::{compiler, consts::LANG_EXTENSIONS, runner};
 use crate::server::models::{self, SubmissionStatus};
 
 type SubmissionStatusCode = i16;
@@ -17,7 +17,8 @@ struct SubmitRet {
 
 static SINGLETON_COMPILER: Lazy<Arc<compiler::Compiler>> =
     Lazy::new(|| Arc::new(compiler::Compiler::default()));
-static SINGLETON_RUNNER: Lazy<Arc<runner::Runner>> = Lazy::new(|| Arc::new(runner::Runner::default()));
+static SINGLETON_RUNNER: Lazy<Arc<runner::Runner>> =
+    Lazy::new(|| Arc::new(runner::Runner::default()));
 
 #[tracing::instrument(
     name = "Submit code",
@@ -49,25 +50,28 @@ pub async fn submit(form: web::Json<models::Submission>) -> HttpResponse {
 
     let testcase_path = format!("assets/{problem_id}");
 
+    // FIXME
     // exec task
-    let this_task = Task::new(problem_id, &testcase_path, lang, source);
-    let exec_result = this_task.execute(SINGLETON_COMPILER.clone(), SINGLETON_RUNNER.clone());
-    let answer = match exec_result {
-        JudgeStatus::Accepted => SubmissionStatus::Accepted,
-        JudgeStatus::CompilationError(_) => SubmissionStatus::CompilationError,
-        JudgeStatus::WrongAnswer(_, _) => SubmissionStatus::WrongAnswer,
-        JudgeStatus::MemoLimitExceeded(_) => SubmissionStatus::MemoLimitExceeded,
-        JudgeStatus::TimeLimitExceeded(_) => SubmissionStatus::TimeLimitExceeded,
-        JudgeStatus::RuntimeError(_) => SubmissionStatus::RuntimeError,
-        JudgeStatus::UnknownError(_) => SubmissionStatus::UnknownError,
-        _ => SubmissionStatus::UnknownError,
-    } as SubmissionStatusCode;
-    let ret = SubmitRet {
-        status: answer,
-        info: format!("{:?}", exec_result),
-    };
+    // let this_task = Task::new(problem_id, &testcase_path, lang, source);
+    // let thread_pool = ThreadPoolBuilder::new().build();
+    // let exec_result = this_task.execute(SINGLETON_COMPILER.clone(), SINGLETON_RUNNER.clone(), Arc::new(&thread_pool));
+    // let answer = match exec_result {
+    //     JudgeStatus::Accepted => SubmissionStatus::Accepted,
+    //     JudgeStatus::CompilationError(_) => SubmissionStatus::CompilationError,
+    //     JudgeStatus::WrongAnswer(_, _) => SubmissionStatus::WrongAnswer,
+    //     JudgeStatus::MemoLimitExceeded(_) => SubmissionStatus::MemoLimitExceeded,
+    //     JudgeStatus::TimeLimitExceeded(_) => SubmissionStatus::TimeLimitExceeded,
+    //     JudgeStatus::RuntimeError(_) => SubmissionStatus::RuntimeError,
+    //     JudgeStatus::UnknownError(_) => SubmissionStatus::UnknownError,
+    //     _ => SubmissionStatus::UnknownError,
+    // } as SubmissionStatusCode;
+    // let ret = SubmitRet {
+    //     status: answer,
+    //     info: format!("{:?}", exec_result),
+    // };
 
     fs::remove_file(source_path).unwrap();
 
+    let ret = "";
     HttpResponse::Ok().json(ret)
 }

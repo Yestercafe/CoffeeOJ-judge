@@ -3,8 +3,8 @@ use std::{fs, sync::Arc};
 use super::{
     compiler,
     file::{self, get_pairwise_testcase_files, TestcaseFile},
-    judge::JudgeStatus,
-    runner,
+    JudgeStatus,
+    runner::{self, RunnerJob},
 };
 
 pub struct Task {
@@ -29,11 +29,11 @@ impl Task {
         self,
         compiler: Arc<compiler::Compiler>,
         runner: Arc<runner::Runner>,
-    ) -> JudgeStatus {
+    ) -> Result<Vec<RunnerJob>, JudgeStatus> {
         // 1. save source code to file
         let save_ret = match file::save_source_code(&self.source_code, &self.lang) {
             Ok(s) => s,
-            Err(e) => return JudgeStatus::UnknownError(format!("{:?}", e)),
+            Err(e) => return Err(JudgeStatus::UnknownError(format!("{:?}", e))),
         };
 
         // 2. compile
@@ -41,11 +41,11 @@ impl Task {
             Ok(s) => s,
             Err(e) => {
                 return match e {
-                    compiler::Error::CompilationError(msg) => JudgeStatus::CompilationError(msg),
+                    compiler::Error::CompilationError(msg) => Err(JudgeStatus::CompilationError(msg)),
                     compiler::Error::LanguageNotFoundError
                     | compiler::Error::ForkFailed
                     | compiler::Error::NoCompilationLogError => {
-                        JudgeStatus::CompilationError(format!("{:?}", e))
+                        Err(JudgeStatus::CompilationError(format!("{:?}", e)))
                     }
                 }
             }
@@ -63,16 +63,11 @@ impl Task {
         }
         let testcases = get_pairwise_testcase_files(testcase_files);
 
-        let answer = match runner.execute(&executable_path, &self.lang, &testcases) {
-            Ok(a) => a,
-            Err(e) => return JudgeStatus::UnknownError(format!("{:?}", e)),
-        };
+        runner.execute(executable_path.clone(), &self.lang, &testcases).map_err(|e| JudgeStatus::UnknownError(format!("{:?}", e)))
 
         // 4. remove compilation intermediate files (runner.clean)
 
         // TODO defer.1. update database (db.update(id, xxx))
         // do defer in thread pool
-
-        answer.get_run_status_owned()
     }
 }

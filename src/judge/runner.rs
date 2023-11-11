@@ -1,22 +1,27 @@
-use std::{collections::BTreeMap, ffi::CString, fs, sync::Mutex};
+use std::{
+    collections::BTreeMap,
+    ffi::CString,
+    fs,
+    ops::{Deref, DerefMut},
+    sync::{
+        atomic::{AtomicU64, AtomicUsize, Ordering},
+        Arc, Mutex,
+    }, fmt,
+};
 
 use nix::{
     libc,
     sys::wait::waitpid,
-    unistd::{self, ForkResult},
+    unistd::{self, fork, ForkResult},
 };
 use toml::{Table, Value};
 
 use crate::{
     c_string,
-    judge::{
-        consts::CONFIG_PATH,
-        file::{Testcase, TestcaseFile},
-        judge::Judge,
-    },
+    judge::{consts::CONFIG_PATH, file::Testcase},
 };
 
-use super::judge::JudgeStatus;
+use super::comparer::{self, Comparer, ComparerResult};
 
 #[derive(Debug, PartialEq, PartialOrd, Eq, Ord, Clone)]
 pub enum FileType {
@@ -32,41 +37,205 @@ pub enum Error {
     LanguageNotFoundError,
     CommandEmptyError,
     FileSystemError,
+    IOError,
 }
 
 pub struct Runner {
     running_recipe: Mutex<BTreeMap<String, Option<Vec<String>>>>,
 }
 
-pub struct Answer {
-    run_status: JudgeStatus,
-    time_elpased: u64,
-    mem_used: u64,
+type DeferFn = Box<dyn FnOnce(Arc<RunnerJobSharedData>) + Send + 'static>;
+
+struct RunnerJobSharedData {
+    cnt_testcases: AtomicUsize,
+    cnt_checked: AtomicUsize,
+    cnt_wrong_answer: AtomicUsize,
+    mem_cost: AtomicU64,
+    time_cost: AtomicU64,
+    // FIXME shared_data may be deadlocked?
+    defer: Mutex<Option<DeferFn>>,
+    executable_path: Mutex<String>,
+    command: Mutex<Vec<CString>>,
 }
 
-impl Answer {
-    fn new(run_status: JudgeStatus, time_elpased: u64, mem_used: u64) -> Answer {
-        Answer {
-            run_status,
-            time_elpased,
-            mem_used,
+impl RunnerJobSharedData {
+    pub fn get_cnt_testcases(&self) -> usize {
+        self.cnt_checked.load(Ordering::SeqCst)
+    }
+
+    pub fn get_cnt_checked(&self) -> usize {
+        self.cnt_checked.load(Ordering::SeqCst)
+    }
+
+    pub fn get_cnt_wrong_answer(&self) -> usize {
+        self.cnt_wrong_answer.load(Ordering::SeqCst)
+    }
+
+    pub fn get_mem_cost(&self) -> u64 {
+        self.mem_cost.load(Ordering::SeqCst)
+    }
+
+    pub fn get_time_cost(&self) -> u64 {
+        self.time_cost.load(Ordering::SeqCst)
+    }
+}
+
+impl fmt::Debug for RunnerJobSharedData {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RunnerJobSharedData")
+        .field("cnt_testcases", &self.get_cnt_testcases())
+        .field("cnt_checked", &self.get_cnt_checked())
+        .field("cnt_wrong_answer", &self.get_cnt_wrong_answer())
+        .field("mem_cost", &self.get_mem_cost())
+        .field("time_cost", &self.get_time_cost())
+        .finish()
+    }
+}
+
+impl RunnerJobSharedData {
+    fn new(
+        cnt_testcases: usize,
+        defer: DeferFn,
+        execuable_path: String,
+        command: Vec<CString>,
+    ) -> RunnerJobSharedData {
+        RunnerJobSharedData {
+            cnt_testcases: AtomicUsize::new(cnt_testcases),
+            cnt_checked: AtomicUsize::new(0usize),
+            cnt_wrong_answer: AtomicUsize::new(0usize),
+            mem_cost: AtomicU64::new(0u64),
+            time_cost: AtomicU64::new(0u64),
+            defer: Mutex::new(Some(defer)),
+            executable_path: Mutex::new(execuable_path),
+            command: Mutex::new(command),
         }
     }
 
-    pub fn get_run_status(&self) -> &JudgeStatus {
-        &self.run_status
+    fn is_complete(&self) -> Option<DeferFn> {
+        let cnt_checked = self.cnt_checked.load(Ordering::SeqCst);
+        if cnt_checked < self.cnt_testcases.load(Ordering::Relaxed) {
+            return None;
+        }
+
+        // FIXME stupid implementation, and I am not sure if it works
+        let mut defer = self.defer.lock().unwrap();
+        let ret = if defer.deref().is_some() {
+            std::mem::take(defer.deref_mut()).unwrap()
+        } else {
+            return None;
+        };
+
+        Some(ret)
+    }
+}
+
+#[derive(Debug)]
+pub struct RunnerJob {
+    testcase: Testcase,
+    shared_data: Arc<RunnerJobSharedData>,
+}
+
+impl RunnerJob {
+    fn new(testcase: Testcase, shared_data: Arc<RunnerJobSharedData>) -> RunnerJob {
+        RunnerJob {
+            testcase,
+            shared_data,
+        }
     }
 
-    pub fn get_run_status_owned(self) -> JudgeStatus {
-        self.run_status
-    }
+    pub fn execute_once(self) -> Result<(), Error> {
+        let exec_stdout_path = format!(
+            "{}-{}-stdout",
+            *self.shared_data.executable_path.lock().unwrap(),
+            self.testcase.output_file.get_name()
+        );
+        let exec_stderr_path = format!(
+            "{}-{}-stderr",
+            *self.shared_data.executable_path.lock().unwrap(),
+            self.testcase.output_file.get_name()
+        );
+        let Testcase {
+            input_file,
+            output_file,
+        } = &self.testcase;
+        let testcase_input_path = input_file.get_path();
+        let testcase_output_path = output_file.get_path();
 
-    pub fn get_time_elpased(&self) -> u64 {
-        self.time_elpased
-    }
+        match unsafe { fork() } {
+            Ok(ForkResult::Parent { child, .. }) => {
+                waitpid(child, None).unwrap();
+            }
+            Ok(ForkResult::Child) => {
+                let testcase_input_path = c_string!(testcase_input_path);
+                let exec_stdout_path = c_string!(exec_stdout_path.as_str());
+                let exec_stderr_path = c_string!(exec_stderr_path.as_str());
+                let r_mode = c_string!("r");
+                let w_mode = c_string!("w");
 
-    pub fn get_mem_used(&self) -> u64 {
-        self.mem_used
+                unsafe {
+                    let stdin = libc::fdopen(libc::STDIN_FILENO, r_mode.as_ptr());
+                    libc::freopen(testcase_input_path.as_ptr(), r_mode.as_ptr(), stdin);
+                    let stdout = libc::fdopen(libc::STDOUT_FILENO, w_mode.as_ptr());
+                    libc::freopen(exec_stdout_path.as_ptr(), w_mode.as_ptr(), stdout);
+                    let stderr = libc::fdopen(libc::STDERR_FILENO, w_mode.as_ptr());
+                    libc::freopen(exec_stderr_path.as_ptr(), w_mode.as_ptr(), stderr);
+                }
+
+                let command = self.shared_data.command.lock().unwrap();
+                let command = command.deref();
+                match unistd::execvp(&command[0], command) {
+                    Ok(_) => unreachable!(),
+                    Err(errno) => unistd::write(
+                        libc::STDERR_FILENO,
+                        format!(
+                            "Execvp error, errno = {:?}, testcase input file path: {:?}\n",
+                            errno, testcase_input_path
+                        )
+                        .as_bytes(),
+                    )
+                    .ok(),
+                };
+                unsafe {
+                    libc::exit(0);
+                }
+            }
+            _ => panic!("Fork failed"),
+        }
+
+        let result = Comparer::new(testcase_output_path, &exec_stdout_path)
+            .compare()
+            .map_err(|e| match e {
+                comparer::Error::FileSystemError => Error::FileSystemError,
+                comparer::Error::IOError => Error::IOError,
+            })?;
+        // TODO do clean
+
+        if result != ComparerResult::Consistent {
+            self.shared_data
+                .cnt_wrong_answer
+                .fetch_add(1, Ordering::SeqCst);
+        }
+
+        // TODO mem and time
+        let mem_used = 1u64;
+        let time_elapsed = 1u64;
+
+        self.shared_data
+            .mem_cost
+            .fetch_add(mem_used, Ordering::SeqCst);
+        self.shared_data
+            .time_cost
+            .fetch_add(time_elapsed, Ordering::SeqCst);
+
+        self.shared_data.cnt_checked.fetch_add(1, Ordering::SeqCst);
+
+        dbg!(&result);
+
+        if let Some(defer) = self.shared_data.is_complete() {
+            defer(self.shared_data.clone());
+        }
+
+        Ok(())
     }
 }
 
@@ -168,95 +337,30 @@ impl Runner {
 
     pub fn execute(
         &self,
-        executable_path: &str,
+        executable_path: String,
         lang: &str,
         testcases: &Vec<Testcase>,
-    ) -> Result<Answer, Error> {
-        let command = self.generate_execution_command(executable_path, lang)?;
-        dbg!(&command);
+    ) -> Result<Vec<RunnerJob>, Error> {
+        let command = self.generate_execution_command(&executable_path, lang)?;
+        dbg!(&*command);
 
-        // TODO need to refactor
-        // =====================================================================
-        let r_mode = c_string!("r");
-        let w_mode = c_string!("w");
+        let defer = Box::new(|shared_data: Arc<RunnerJobSharedData>| {
+            println!("{:#?}", *shared_data);
+            // TODO write into Database
+        });
+        let shared_data = Arc::new(RunnerJobSharedData::new(
+            testcases.len(),
+            defer,
+            executable_path,
+            command,
+        ));
 
-        let mut wrong_cnt = 0usize;
-        for (i, testcase) in testcases.iter().enumerate() {
-            let input_testcase = &testcase.input_file;
-            let stdout_testcase_file = TestcaseFile::new(
-                format!("{}.stdout", input_testcase.get_name()).as_str(),
-                format!("{}.stdout", input_testcase.get_path()).as_str(),
-            );
-
-            println!("===== Testing `{:?}`, id: {}", input_testcase, i);
-            let errout_path = format!("{}.stderr", input_testcase.get_path());
-            match unsafe { unistd::fork() } {
-                Ok(ForkResult::Parent { child }) => {
-                    waitpid(child, None).unwrap();
-                }
-                Ok(ForkResult::Child) => {
-                    let input_path = c_string!(input_testcase.get_path());
-                    let output_path =
-                        c_string!(format!("{}.stdout", input_testcase.get_path()).as_str());
-                    let errout_path = c_string!(errout_path.as_str());
-
-                    unsafe {
-                        let stdin = libc::fdopen(libc::STDIN_FILENO, r_mode.as_ptr());
-                        libc::freopen(input_path.as_ptr(), r_mode.as_ptr(), stdin);
-                        let stdout = libc::fdopen(libc::STDOUT_FILENO, w_mode.as_ptr());
-                        libc::freopen(output_path.as_ptr(), w_mode.as_ptr(), stdout);
-                        let stderr = libc::fdopen(libc::STDERR_FILENO, w_mode.as_ptr());
-                        libc::freopen(errout_path.as_ptr(), w_mode.as_ptr(), stderr);
-                    }
-
-                    match unistd::execvp(&command[0], &command) {
-                        Ok(_) => unreachable!(),
-                        Err(errno) => unistd::write(
-                            libc::STDERR_FILENO,
-                            format!(
-                                "Execvp error, errno = {:?}, input testcase file: {:?}\n",
-                                errno, input_testcase
-                            )
-                            .as_bytes(),
-                        )
-                        .ok(),
-                    };
-                    unsafe {
-                        libc::exit(0);
-                    }
-                }
-                _ => panic!("Fork failed"),
-            }
-
-            // TODO clean stdout and stderr
-            let err_content =
-                fs::read_to_string(errout_path).map_err(|_| Error::FileSystemError)?;
-            if !err_content.is_empty() {
-                return Ok(Answer::new(JudgeStatus::RuntimeError(err_content), 0, 0));
-            }
-
-            // stdout => xxx.in.stdout
-            // judge:
-            match Judge::judge(&stdout_testcase_file, &testcase.output_file) {
-                Ok(true) => {}
-                Ok(false) => wrong_cnt += 1,
-                Err(err) => println!("====? Errno: {}", err),
-            };
-
-            fs::remove_file(stdout_testcase_file.get_path()).map_err(|_| Error::FileSystemError)?;
-
-            println!("===== Testcase {} was done", i);
+        let mut runner_jobs = vec![];
+        for (_, testcase) in testcases.iter().enumerate() {
+            let runner_job = RunnerJob::new(testcase.clone(), shared_data.clone());
+            runner_jobs.push(runner_job);
         }
-        // =====================================================================
 
-        let run_state = if wrong_cnt == 0 {
-            JudgeStatus::Accepted
-        } else {
-            JudgeStatus::WrongAnswer(testcases.len() - wrong_cnt, testcases.len())
-        };
-        // TODO
-        let time_elpased = 1;
-        let mem_used = 1;
-        Ok(Answer::new(run_state, time_elpased, mem_used))
+        Ok(runner_jobs)
     }
 }
