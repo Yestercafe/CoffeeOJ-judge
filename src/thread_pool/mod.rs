@@ -242,7 +242,13 @@ impl ThreadPool {
                     println!("Worker #{id}: {:#?}", runner_jobs);
                     for job in runner_jobs {
                         shared_data.queued_job_count.fetch_add(1, Ordering::SeqCst);
-                        shared_data.job_sender.send(Box::new(|| { job.execute_once().unwrap(); vec![] })).unwrap();
+                        shared_data
+                            .job_sender
+                            .send(Box::new(|| {
+                                job.execute_once().unwrap();
+                                vec![]
+                            }))
+                            .unwrap();
                     }
 
                     shared_data

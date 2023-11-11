@@ -3,8 +3,8 @@ use std::{fs, sync::Arc};
 use super::{
     compiler,
     file::{self, get_pairwise_testcase_files, TestcaseFile},
-    JudgeStatus,
     runner::{self, RunnerJob},
+    JudgeStatus,
 };
 
 pub struct Task {
@@ -41,7 +41,9 @@ impl Task {
             Ok(s) => s,
             Err(e) => {
                 return match e {
-                    compiler::Error::CompilationError(msg) => Err(JudgeStatus::CompilationError(msg)),
+                    compiler::Error::CompilationError(msg) => {
+                        Err(JudgeStatus::CompilationError(msg))
+                    }
                     compiler::Error::LanguageNotFoundError
                     | compiler::Error::ForkFailed
                     | compiler::Error::NoCompilationLogError => {
@@ -63,7 +65,9 @@ impl Task {
         }
         let testcases = get_pairwise_testcase_files(testcase_files);
 
-        runner.execute(executable_path.clone(), &self.lang, &testcases).map_err(|e| JudgeStatus::UnknownError(format!("{:?}", e)))
+        runner
+            .execute(executable_path.clone(), &self.lang, &testcases)
+            .map_err(|e| JudgeStatus::UnknownError(format!("{:?}", e)))
 
         // 4. remove compilation intermediate files (runner.clean)
 

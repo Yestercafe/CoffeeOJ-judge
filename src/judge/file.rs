@@ -1,6 +1,9 @@
 use std::{collections::BTreeMap, fmt::Debug, fs::File, io::Write};
 
-use super::{consts::{LANG_EXTENSIONS, SOURCE_CODE_SAVED_PATH}, JudgeStatus};
+use super::{
+    consts::{LANG_EXTENSIONS, SOURCE_CODE_SAVED_PATH},
+    JudgeStatus,
+};
 
 use random_number::{self, random};
 

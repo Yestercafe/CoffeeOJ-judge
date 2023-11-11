@@ -1,12 +1,12 @@
 use std::{
     collections::BTreeMap,
     ffi::CString,
-    fs,
+    fmt, fs,
     ops::{Deref, DerefMut},
     sync::{
         atomic::{AtomicU64, AtomicUsize, Ordering},
         Arc, Mutex,
-    }, fmt,
+    },
 };
 
 use nix::{
@@ -83,12 +83,12 @@ impl RunnerJobSharedData {
 impl fmt::Debug for RunnerJobSharedData {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RunnerJobSharedData")
-        .field("cnt_testcases", &self.get_cnt_testcases())
-        .field("cnt_checked", &self.get_cnt_checked())
-        .field("cnt_wrong_answer", &self.get_cnt_wrong_answer())
-        .field("mem_cost", &self.get_mem_cost())
-        .field("time_cost", &self.get_time_cost())
-        .finish()
+            .field("cnt_testcases", &self.get_cnt_testcases())
+            .field("cnt_checked", &self.get_cnt_checked())
+            .field("cnt_wrong_answer", &self.get_cnt_wrong_answer())
+            .field("mem_cost", &self.get_mem_cost())
+            .field("time_cost", &self.get_time_cost())
+            .finish()
     }
 }
 

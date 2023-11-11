@@ -1,10 +1,7 @@
 #[cfg(test)]
 mod test {
     use crate::judge::runner::RunnerJob;
-    use crate::{
-        judge::task::Task,
-        thread_pool::thread_pool_builder::ThreadPoolBuilder,
-    };
+    use crate::{judge::task::Task, thread_pool::thread_pool_builder::ThreadPoolBuilder};
 
     #[test]
     fn thread_pool_join() {
