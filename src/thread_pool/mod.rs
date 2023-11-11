@@ -199,7 +199,7 @@ impl ThreadPool {
             if let Ok(runner_jobs) = result {
                 runner_jobs
             } else {
-                println!("{:?}", result.unwrap_err());
+                // dbg!(&result.unwrap_err());
                 vec![]
             }
         });
@@ -239,7 +239,7 @@ impl ThreadPool {
                     shared_data.queued_job_count.fetch_sub(1, Ordering::SeqCst);
 
                     let runner_jobs: Vec<RunnerJob> = job();
-                    println!("Worker #{id}: {:#?}", runner_jobs);
+                    // dbg!(&id, &runner_jobs);
                     for job in runner_jobs {
                         shared_data.queued_job_count.fetch_add(1, Ordering::SeqCst);
                         shared_data

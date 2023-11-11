@@ -1,8 +1,8 @@
 languages = ["c", "cpp", "rust", "python"]
 
 [compile]
-c = "clang -std=c17 -o $target $source"
-cpp = "clang++ -std=c++20 -o $target $source"
+c = "gcc -std=c17 -o $target $source"
+cpp = "g++ -std=c++20 -o $target $source"
 rust = "rustc -o $target $source"
 
 [execute]

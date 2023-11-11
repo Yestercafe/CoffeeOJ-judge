@@ -127,9 +127,9 @@ impl Compiler {
             return Ok(source.get_full_path().to_string());
         }
         let (target_full_path, command) = ret.unwrap();
-        dbg!(&command);
+        // dbg!(&command);
         let log_path = format!("{target_full_path}.log");
-        dbg!(&log_path);
+        // dbg!(&log_path);
 
         match unsafe { fork() } {
             Ok(ForkResult::Parent { child, .. }) => {

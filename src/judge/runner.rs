@@ -229,7 +229,7 @@ impl RunnerJob {
 
         self.shared_data.cnt_checked.fetch_add(1, Ordering::SeqCst);
 
-        dbg!(&result);
+        // dbg!(&result);
 
         if let Some(defer) = self.shared_data.is_complete() {
             defer(self.shared_data.clone());
@@ -295,7 +295,7 @@ impl Default for Runner {
             _ => panic!("config: [execute] should be set correctly"),
         }
 
-        dbg!(&recipe);
+        // dbg!(&recipe);
 
         Runner {
             running_recipe: Mutex::new(recipe),
@@ -342,10 +342,10 @@ impl Runner {
         testcases: &Vec<Testcase>,
     ) -> Result<Vec<RunnerJob>, Error> {
         let command = self.generate_execution_command(&executable_path, lang)?;
-        dbg!(&*command);
+        // dbg!(&*command);
 
         let defer = Box::new(|shared_data: Arc<RunnerJobSharedData>| {
-            println!("{:#?}", *shared_data);
+            // dbg!(&*shared_data);
             // TODO write into Database
         });
         let shared_data = Arc::new(RunnerJobSharedData::new(
