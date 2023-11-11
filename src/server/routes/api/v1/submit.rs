@@ -15,9 +15,9 @@ struct SubmitRet {
     info: String,
 }
 
-static SINGLETON_COMPILER: Lazy<Arc<compiler::Compiler>> =
+static _SINGLETON_COMPILER: Lazy<Arc<compiler::Compiler>> =
     Lazy::new(|| Arc::new(compiler::Compiler::default()));
-static SINGLETON_RUNNER: Lazy<Arc<runner::Runner>> =
+static _SINGLETON_RUNNER: Lazy<Arc<runner::Runner>> =
     Lazy::new(|| Arc::new(runner::Runner::default()));
 
 #[tracing::instrument(
@@ -48,7 +48,7 @@ pub async fn submit(form: web::Json<models::Submission>) -> HttpResponse {
         return HttpResponse::Ok() .json(body);
     };
 
-    let testcase_path = format!("assets/{problem_id}");
+    let _testcase_path = format!("assets/{problem_id}");
 
     // FIXME
     // exec task
